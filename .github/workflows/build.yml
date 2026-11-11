@@ -3,8 +3,32 @@ name: Build export templates
 on:
   workflow_dispatch:
     inputs:
+      build_windows:
+        description: "Windows x86_64 (incl. console wrappers)"
+        type: boolean
+        default: true
+      build_linux:
+        description: "Linux x86_64"
+        type: boolean
+        default: true
+      build_web:
+        description: "Web (wasm32: release/debug x threads/nothreads x dlink)"
+        type: boolean
+        default: false
+      build_android:
+        description: "Android (arm32/arm64/x86_64 APKs + source)"
+        type: boolean
+        default: false
+      build_ios:
+        description: "iOS (arm64 device + x86_64 simulator) — macOS runner, 10x minutes"
+        type: boolean
+        default: false
+      build_macos:
+        description: "macOS (x86_64 + arm64) — macOS runner, 10x minutes"
+        type: boolean
+        default: false
       extra_scons_args:
-        description: "Extra SCons args appended to each build (e.g. vulkan=no)"
+        description: "Extra SCons args appended to each scons build (e.g. vulkan=no)"
         required: false
         default: ""
 
@@ -17,10 +41,11 @@ concurrency:
 
 jobs:
   validate:
-    name: Validate version & profile
+    name: Validate & plan
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.version.outputs.tag }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
 
@@ -37,34 +62,28 @@ jobs:
       - name: Check build profile
         run: python scripts/prepare_profile.py --input profiles/build_profile.json --output .build/profile.gdbuild
 
+      - name: Compute build matrix
+        id: matrix
+        env:
+          BUILD_WINDOWS: ${{ inputs.build_windows }}
+          BUILD_LINUX: ${{ inputs.build_linux }}
+          BUILD_WEB: ${{ inputs.build_web }}
+          BUILD_ANDROID: ${{ inputs.build_android }}
+          BUILD_IOS: ${{ inputs.build_ios }}
+          BUILD_MACOS: ${{ inputs.build_macos }}
+        run: >
+          python scripts/make_matrix.py
+          --windows "$BUILD_WINDOWS" --linux "$BUILD_LINUX" --web "$BUILD_WEB"
+          --android "$BUILD_ANDROID" --ios "$BUILD_IOS" --macos "$BUILD_MACOS"
+
   build:
-    name: ${{ matrix.platform }} / ${{ matrix.target }}
+    name: ${{ matrix.key }}
     needs: validate
     runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.timeout }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-            target: template_release
-            artifact: godot/bin/godot.linuxbsd.template_release.x86_64
-            extra_args: use_static_cpp=yes debug_symbols=no
-          - os: ubuntu-latest
-            platform: linux
-            target: template_debug
-            artifact: godot/bin/godot.linuxbsd.template_debug.x86_64
-            extra_args: use_static_cpp=yes
-          - os: windows-latest
-            platform: windows
-            target: template_release
-            artifact: godot/bin/godot.windows.template_release.x86_64.exe
-            extra_args: debug_symbols=no
-          - os: windows-latest
-            platform: windows
-            target: template_debug
-            artifact: godot/bin/godot.windows.template_debug.x86_64.exe
-            extra_args: ""
+      matrix: ${{ fromJson(needs.validate.outputs.matrix) }}
     env:
       SCONS_CACHE: ${{ github.workspace }}/.scons-cache
       SCONS_CACHE_LIMIT: 4096
@@ -75,22 +94,36 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install SCons
+        run: python -m pip install --upgrade scons
+
       - name: Cache SCons build cache
         uses: actions/cache@v4
         with:
           path: .scons-cache
-          key: scons-${{ matrix.platform }}-${{ matrix.target }}-${{ needs.validate.outputs.tag }}-${{ hashFiles('profiles/*.json') }}
+          key: scons-${{ matrix.key }}-${{ needs.validate.outputs.tag }}-${{ hashFiles('profiles/*.json') }}
           restore-keys: |
-            scons-${{ matrix.platform }}-${{ matrix.target }}-${{ needs.validate.outputs.tag }}
-
-      - name: Install SCons
-        run: python -m pip install --upgrade scons
+            scons-${{ matrix.key }}-${{ needs.validate.outputs.tag }}
 
       - name: Install Linux build dependencies
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends build-essential pkg-config libx11-dev libxcursor-dev libxinerama-dev libgl1-mesa-dev libglu1-mesa-dev libasound2-dev libpulse-dev libudev-dev libxi-dev libxrandr-dev libwayland-dev libxkbcommon-dev
+
+      - name: Set up Java 17 (Android)
+        if: matrix.platform == 'android'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Emscripten (Web)
+        if: matrix.platform == 'web'
+        uses: emscripten-core/setup-emsdk@v16
+        with:
+          version: 4.0.11
+          no-cache: true
 
       - name: Checkout Godot ${{ needs.validate.outputs.tag }}
         uses: actions/checkout@v4
@@ -102,26 +135,151 @@ jobs:
       - name: Prepare build profile
         run: python scripts/prepare_profile.py --input profiles/build_profile.json --output .build/profile.gdbuild
 
-      - name: Build template
+      - name: Build (Windows/Linux)
+        if: matrix.platform == 'windows' || matrix.platform == 'linux'
         working-directory: godot
         run: >
           scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=x86_64
           module_mono_enabled=no progress=no
           build_profile=../.build/profile.gdbuild
-          ${{ matrix.extra_args }}
+          ${{ matrix.scons_extra }}
           ${{ inputs.extra_scons_args }}
+
+      - name: Build (Web, all eight variants)
+        if: matrix.platform == 'web'
+        env:
+          SCONS_JOBS: "2"
+          SCONS_EXTRA_ARGS: module_mono_enabled=no build_profile=${{ github.workspace }}/.build/profile.gdbuild ${{ inputs.extra_scons_args }}
+        run: bash scripts/build_web.sh godot
+
+      - name: Build (Android, ${{ matrix.arch }})
+        if: matrix.platform == 'android'
+        working-directory: godot
+        run: |
+          SW=yes
+          python misc/scripts/install_swappy_android.py || SW=no
+          scons platform=android target=template_release arch=${{ matrix.arch }} production=yes swappy=$SW progress=no module_mono_enabled=no build_profile=../.build/profile.gdbuild ${{ inputs.extra_scons_args }}
+          scons platform=android target=template_debug arch=${{ matrix.arch }} production=yes swappy=$SW progress=no module_mono_enabled=no build_profile=../.build/profile.gdbuild ${{ inputs.extra_scons_args }}
+
+      - name: Stage Android libraries
+        if: matrix.platform == 'android'
+        run: |
+          mkdir -p android_libs
+          cp -r godot/platform/android/java/lib/libs/release android_libs/ 2>/dev/null || true
+          cp -r godot/platform/android/java/lib/libs/debug android_libs/ 2>/dev/null || true
+          find android_libs -type f | sort
+
+      - name: Build (iOS, device + simulator)
+        if: matrix.platform == 'ios'
+        working-directory: godot
+        run: |
+          AK=yes
+          python misc/scripts/install_accesskit.py || AK=no
+          scons platform=ios target=template_release arch=arm64 production=yes use_lto=no accesskit=$AK progress=no module_mono_enabled=no build_profile=../.build/profile.gdbuild ${{ inputs.extra_scons_args }}
+          scons platform=ios target=template_debug arch=arm64 production=yes use_lto=no accesskit=$AK progress=no module_mono_enabled=no build_profile=../.build/profile.gdbuild ${{ inputs.extra_scons_args }}
+          scons platform=ios target=template_release arch=x86_64 simulator=yes production=yes use_lto=no accesskit=$AK progress=no module_mono_enabled=no build_profile=../.build/profile.gdbuild ${{ inputs.extra_scons_args }}
+          scons platform=ios target=template_debug arch=x86_64 simulator=yes production=yes use_lto=no accesskit=$AK progress=no module_mono_enabled=no build_profile=../.build/profile.gdbuild ${{ inputs.extra_scons_args }}
+
+      - name: Package (iOS)
+        if: matrix.platform == 'ios'
+        run: bash scripts/package_ios.sh godot
+
+      - name: Build (macOS, ${{ matrix.target }})
+        if: matrix.platform == 'macos'
+        working-directory: godot
+        run: |
+          ANG=yes
+          AK=yes
+          VK=yes
+          python misc/scripts/install_angle.py || ANG=no
+          python misc/scripts/install_accesskit.py || AK=no
+          sh misc/scripts/install_vulkan_sdk_macos.sh || VK=no
+          scons platform=macos target=${{ matrix.target }} arch=x86_64 production=yes vulkan=$VK angle=$ANG accesskit=$AK progress=no module_mono_enabled=no build_profile=../.build/profile.gdbuild ${{ matrix.scons_extra }} ${{ inputs.extra_scons_args }}
+          scons platform=macos target=${{ matrix.target }} arch=arm64 production=yes vulkan=$VK angle=$ANG accesskit=$AK progress=no module_mono_enabled=no build_profile=../.build/profile.gdbuild ${{ matrix.scons_extra }} ${{ inputs.extra_scons_args }}
+
+      - name: Stage macOS binaries
+        if: matrix.platform == 'macos'
+        run: |
+          mkdir -p macos_out
+          cp godot/bin/godot.macos.${{ matrix.target }}.x86_64 macos_out/godot_macos_${{ matrix.target }}.x86_64
+          cp godot/bin/godot.macos.${{ matrix.target }}.arm64 macos_out/godot_macos_${{ matrix.target }}.arm64
+          chmod +x macos_out/*
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: template-${{ matrix.platform }}-${{ matrix.target }}
-          path: ${{ matrix.artifact }}
+          name: template-${{ matrix.key }}
+          path: ${{ matrix.artifact_glob }}
+          if-no-files-found: error
+
+  android-gradle:
+    name: android / gradle packaging
+    needs: [validate, build]
+    if: contains(needs.validate.outputs.matrix, 'android-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install Android SDK components
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;29.0.14206865" "platforms;android-36" "build-tools;36.1.0"
+
+      - name: Checkout Godot ${{ needs.validate.outputs.tag }}
+        uses: actions/checkout@v4
+        with:
+          repository: godotengine/godot
+          ref: ${{ needs.validate.outputs.tag }}
+          path: godot
+
+      - name: Download native libraries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: template-android-*
+          path: android_artifacts
+          merge-multiple: false
+
+      - name: Restore native libraries layout
+        run: |
+          mkdir -p godot/platform/android/java/lib/libs
+          for dir in android_artifacts/*/; do
+            cp -r "$dir"release godot/platform/android/java/lib/libs/ 2>/dev/null || true
+            cp -r "$dir"debug godot/platform/android/java/lib/libs/ 2>/dev/null || true
+          done
+          find godot/platform/android/java/lib/libs -type f | sort
+
+      - name: Generate Android templates
+        working-directory: godot/platform/android/java
+        run: ./gradlew generateGodotTemplates
+
+      - name: Collect generated templates
+        run: |
+          mkdir -p android_out
+          find godot \( -name "android_release.apk" -o -name "android_debug.apk" -o -name "android_source.zip" \) -exec cp {} android_out/ \;
+          ls -l android_out/
+          test -f android_out/android_release.apk
+          test -f android_out/android_debug.apk
+          test -f android_out/android_source.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: template-android
+          path: android_out/*
           if-no-files-found: error
 
   package-release:
     name: Package & publish release
-    needs: [validate, build]
+    needs: [validate, build, android-gradle]
+    if: always() && needs.validate.result == 'success' && needs.build.result == 'success' && (needs.android-gradle.result == 'success' || needs.android-gradle.result == 'skipped')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       TAG: ${{ needs.validate.outputs.tag }}
     steps:
@@ -131,13 +289,15 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Checkout Godot sources (version metadata)
+      - name: Checkout Godot sources (version metadata + app bundle template)
         uses: actions/checkout@v4
         with:
           repository: godotengine/godot
           ref: ${{ needs.validate.outputs.tag }}
           path: godot
-          sparse-checkout: core/version.py
+          sparse-checkout: |
+            core/version.py
+            misc/dist/macos_template.app
           sparse-checkout-cone-mode: false
           fetch-depth: 1
 
@@ -156,10 +316,10 @@ jobs:
         run: python scripts/prepare_profile.py --input profiles/build_profile.json --output .build/profile.gdbuild
 
       - name: Assemble template package
-        run: python scripts/package_templates.py --tpl-dir "${{ steps.tpl.outputs.template_dir }}" --tag "$TAG"
+        run: python scripts/package_templates.py --tpl-dir "${{ steps.tpl.outputs.template_dir }}" --tag "$TAG" --artifacts artifacts --dist-dir godot/misc/dist --output .
 
       - name: Generate release notes
-        run: python scripts/make_release_notes.py --tag "$TAG" --tpl-dir "${{ steps.tpl.outputs.template_dir }}" --repo-sha "${{ github.sha }}" --output RELEASE_NOTES.md
+        run: python scripts/make_release_notes.py --tag "$TAG" --tpl-dir "${{ steps.tpl.outputs.template_dir }}" --tpz "Godot_v${TAG}_export_templates.tpz" --profile .build/profile.gdbuild --repo-sha "${{ github.sha }}" --output RELEASE_NOTES.md
 
       - name: Publish release
         env:
@@ -167,7 +327,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           gh release create "godot-$TAG" \
-            --title "Godot $TAG — custom export templates (Windows/Linux, UI-focused)" \
+            --title "Godot $TAG — custom export templates (UI-focused)" \
             --notes-file RELEASE_NOTES.md \
             --latest \
             "Godot_v${TAG}_export_templates.tpz"

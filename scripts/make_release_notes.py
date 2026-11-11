@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import zipfile
 
 
 def build_profile_section(profile_path: str) -> str:
@@ -37,14 +38,36 @@ def build_profile_section(profile_path: str) -> str:
     )
 
 
+def list_tpz_contents(tpz_path: str, tpl_dir: str) -> list[tuple[str, int]]:
+    prefix = f"templates/{tpl_dir}/"
+    entries = []
+    with zipfile.ZipFile(tpz_path) as archive:
+        for name in archive.namelist():
+            if name.startswith(prefix) and name != f"{prefix}version.txt":
+                entries.append((name[len(prefix):], archive.getinfo(name).file_size))
+    return sorted(entries)
+
+
+def format_size(size: int) -> str:
+    if size >= 1024 * 1024:
+        return f"{size / (1024 * 1024):.1f} MiB"
+    return f"{size / 1024:.0f} KiB"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate release notes markdown.")
     parser.add_argument("--tag", required=True, help="Godot tag, e.g. 4.7.2-stable")
     parser.add_argument("--tpl-dir", required=True, help="Template folder name, e.g. 4.7.2.stable")
+    parser.add_argument("--tpz", required=True, help="Path to the assembled .tpz package")
     parser.add_argument("--profile", default=".build/profile.gdbuild")
     parser.add_argument("--repo-sha", default="", help="Commit SHA of this repository used for the build")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
+
+    entries = list_tpz_contents(args.tpz, args.tpl_dir)
+    contents_table = "\n".join(
+        f"| `{name}` | {format_size(size)} |" for name, size in entries
+    )
 
     sha = f" (repo commit `{args.repo_sha[:12]}`)" if args.repo_sha else ""
     text = f"""## Custom export templates for Godot {args.tag}
@@ -53,12 +76,13 @@ Built by **godot-template-builder** from the official [godotengine/godot `{args.
 
 > Only **stable** Godot releases are ever built here - `dev`/`beta`/`rc` versions are rejected by the validator.
 
-### Package contents - `Godot_v{args.tag}_export_templates.tpz`
+### Package contents - `Godot_v{args.tag}_export_templates.tpz` (folder `templates/{args.tpl_dir}/`)
 
-| Platform | Files (inside `templates/{args.tpl_dir}/`) |
+| File | Size |
 | --- | --- |
-| Windows x86_64 | `windows_release_x86_64.exe`, `windows_debug_x86_64.exe` |
-| Linux x86_64 | `linux_release.x86_64`, `linux_debug.x86_64` |
+{contents_table}
+
+Covered by this build: **Windows & Linux (x86_64, incl. console wrappers)**, **Web** (all 8 official wasm32 variants incl. dlink/nothreads), **Android** (arm32/arm64/x86_64 APKs + source), **iOS** (arm64 device + x86_64 simulator static libs, Xcode project and xcframeworks in `ios.zip`), **macOS** (x86_64 + arm64 inside `macos.zip`/`macos_template.app`).
 
 ### Build profile
 
@@ -66,7 +90,8 @@ Built by **godot-template-builder** from the official [godotengine/godot `{args.
 
 ### Notes & limitations
 
-- x86_64 only; the `mono`/.NET module is disabled; no editor binary is included.
+- x86_64 only for Windows/Linux; the `mono`/.NET module is disabled everywhere; no editor binaries are included.
+- Android x86_32 (legacy 32-bit) is not built.
 - Classes disabled by the build profile are removed at compile time - exporting a project that uses them will fail at runtime.
 - The editor picks this package up automatically because the version matches `{args.tag}`; if you ever see a version-mismatch warning, the templates were built from a different Godot release.
 
@@ -74,10 +99,11 @@ Built by **godot-template-builder** from the official [godotengine/godot `{args.
 
 - **Windows:** unzip so that `%APPDATA%\\Godot\\export_templates\\{args.tpl_dir}\\` contains the files above.
 - **Linux:** unzip so that `~/.local/share/godot/export_templates/{args.tpl_dir}/` contains the files above.
+- The other platform files live in the same folder and are picked up automatically.
 """
     with open(args.output, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(text)
-    print(f"Release notes written to {args.output}", file=sys.stderr)
+    print(f"Release notes written to {args.output} ({len(entries)} template files listed)", file=sys.stderr)
 
 
 if __name__ == "__main__":
