@@ -27,7 +27,7 @@ platform picklist ─► dynamic build matrix:
 ## Quick start
 
 1. Use this repo as a template (or copy it), then pick a stable Godot release in `GODOT_VERSION` (e.g. `4.7.2-stable`). The validator checks it against the real [godotengine/godot releases](https://github.com/godotengine/godot/releases).
-2. Create a build profile in the Godot editor: **Project → Tools → Engine Compilation Configuration Editor** (available since Godot 4.5). Disable what your UI apps don't need, **Save As** into `profiles/build_profile.json`, and commit. See [profiles/README.md](profiles/README.md) for details.
+2. Create a build profile in the Godot editor: **Project → Tools → Engine Compilation Configuration Editor** (available since Godot 4.5). Disable what your app or game don't need, **Save As** into `profiles/build_profile.json`, and commit. See [profiles/README.md](profiles/README.md) for details.
    *(No profile committed? CI builds with the standard feature set and warns you.)*
 3. Go to **Actions → Build export templates → Run workflow** and tick the platforms you need. Optionally add extra SCons args (e.g. `vulkan=no` to strip the Vulkan/RenderingDevice renderer).
 4. When the run finishes, grab the `.tpz` from **Releases** and unzip it into the Godot user data dir (paths below).
