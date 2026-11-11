@@ -4,6 +4,10 @@
 Each platform group maps to a workflow_dispatch boolean input. The output is a
 JSON matrix ({"include": [...]}) written to GITHUB_OUTPUT for consumption via
 fromJson().
+
+The `dotnet` group builds the same platforms a second time with the mono/.NET
+module enabled (artifact dirs `template-net-*`), producing the separate
+`*_mono_export_templates.tpz` package. Web is not supported for .NET builds.
 """
 
 from __future__ import annotations
@@ -13,15 +17,22 @@ import json
 import os
 import sys
 
-GROUPS = ("windows", "linux", "web", "android", "ios", "macos")
+GROUPS = ("windows", "linux", "web", "android", "ios", "macos", "dotnet")
+
+NO_MONO = "module_mono_enabled=no"
+YES_MONO = "module_mono_enabled=yes"
 
 ENTRIES = [
+    # Standard builds
     {
         "group": "windows",
         "key": "windows-release",
         "os": "windows-latest",
         "platform": "windows",
         "target": "template_release",
+        "variant": "standard",
+        "mono_flag": NO_MONO,
+        "bin_suffix": "",
         "scons_extra": "debug_symbols=no",
         "artifact_glob": "godot/bin/godot.windows.template_release.x86_64*.exe",
         "timeout": 240,
@@ -32,6 +43,9 @@ ENTRIES = [
         "os": "windows-latest",
         "platform": "windows",
         "target": "template_debug",
+        "variant": "standard",
+        "mono_flag": NO_MONO,
+        "bin_suffix": "",
         "scons_extra": "debug_symbols=yes",
         "artifact_glob": "godot/bin/godot.windows.template_debug.x86_64*.exe",
         "timeout": 240,
@@ -42,6 +56,9 @@ ENTRIES = [
         "os": "ubuntu-latest",
         "platform": "linux",
         "target": "template_release",
+        "variant": "standard",
+        "mono_flag": NO_MONO,
+        "bin_suffix": "",
         "scons_extra": "use_static_cpp=yes debug_symbols=no",
         "artifact_glob": "godot/bin/godot.linuxbsd.template_release.x86_64",
         "timeout": 180,
@@ -52,6 +69,9 @@ ENTRIES = [
         "os": "ubuntu-latest",
         "platform": "linux",
         "target": "template_debug",
+        "variant": "standard",
+        "mono_flag": NO_MONO,
+        "bin_suffix": "",
         "scons_extra": "use_static_cpp=yes",
         "artifact_glob": "godot/bin/godot.linuxbsd.template_debug.x86_64",
         "timeout": 180,
@@ -62,6 +82,9 @@ ENTRIES = [
         "os": "ubuntu-latest",
         "platform": "web",
         "target": "template_release",
+        "variant": "standard",
+        "mono_flag": NO_MONO,
+        "bin_suffix": "",
         "scons_extra": "",
         "artifact_glob": "godot/bin/godot.web.template_*.wasm32*.zip",
         "timeout": 300,
@@ -72,6 +95,9 @@ ENTRIES = [
         "os": "ubuntu-latest",
         "platform": "android",
         "arch": "arm32",
+        "variant": "standard",
+        "mono_flag": NO_MONO,
+        "bin_suffix": "",
         "scons_extra": "",
         "artifact_glob": "android_libs/**",
         "timeout": 180,
@@ -82,6 +108,9 @@ ENTRIES = [
         "os": "ubuntu-latest",
         "platform": "android",
         "arch": "arm64",
+        "variant": "standard",
+        "mono_flag": NO_MONO,
+        "bin_suffix": "",
         "scons_extra": "",
         "artifact_glob": "android_libs/**",
         "timeout": 180,
@@ -92,6 +121,9 @@ ENTRIES = [
         "os": "ubuntu-latest",
         "platform": "android",
         "arch": "x86_64",
+        "variant": "standard",
+        "mono_flag": NO_MONO,
+        "bin_suffix": "",
         "scons_extra": "",
         "artifact_glob": "android_libs/**",
         "timeout": 180,
@@ -102,6 +134,9 @@ ENTRIES = [
         "os": "macos-26",
         "platform": "ios",
         "target": "template_release",
+        "variant": "standard",
+        "mono_flag": NO_MONO,
+        "bin_suffix": "",
         "scons_extra": "",
         "artifact_glob": "ios_out/**",
         "timeout": 300,
@@ -112,6 +147,10 @@ ENTRIES = [
         "os": "macos-26",
         "platform": "macos",
         "target": "template_release",
+        "short_target": "release",
+        "variant": "standard",
+        "mono_flag": NO_MONO,
+        "bin_suffix": "",
         "scons_extra": "debug_symbols=no",
         "artifact_glob": "macos_out/**",
         "timeout": 300,
@@ -122,11 +161,164 @@ ENTRIES = [
         "os": "macos-26",
         "platform": "macos",
         "target": "template_debug",
+        "short_target": "debug",
+        "variant": "standard",
+        "mono_flag": NO_MONO,
+        "bin_suffix": "",
+        "scons_extra": "debug_symbols=yes",
+        "artifact_glob": "macos_out/**",
+        "timeout": 300,
+    },
+    # Mono/.NET builds (template-net-* artifacts, packaged into *_mono_export_templates.tpz).
+    # Each entry additionally requires its base platform group to be selected.
+    {
+        "group": "dotnet",
+        "requires": "windows",
+        "key": "net-windows-release",
+        "os": "windows-latest",
+        "platform": "windows",
+        "target": "template_release",
+        "variant": "mono",
+        "mono_flag": YES_MONO,
+        "bin_suffix": ".mono",
+        "scons_extra": "debug_symbols=no",
+        "artifact_glob": "godot/bin/godot.windows.template_*.x86_64.mono*.exe",
+        "timeout": 240,
+    },
+    {
+        "group": "dotnet",
+        "requires": "windows",
+        "key": "net-windows-debug",
+        "os": "windows-latest",
+        "platform": "windows",
+        "target": "template_debug",
+        "variant": "mono",
+        "mono_flag": YES_MONO,
+        "bin_suffix": ".mono",
+        "scons_extra": "debug_symbols=yes",
+        "artifact_glob": "godot/bin/godot.windows.template_*.x86_64.mono*.exe",
+        "timeout": 240,
+    },
+    {
+        "group": "dotnet",
+        "requires": "linux",
+        "key": "net-linux-release",
+        "os": "ubuntu-latest",
+        "platform": "linux",
+        "target": "template_release",
+        "variant": "mono",
+        "mono_flag": YES_MONO,
+        "bin_suffix": ".mono",
+        "scons_extra": "use_static_cpp=no debug_symbols=no",
+        "artifact_glob": "godot/bin/godot.linuxbsd.template_*.x86_64.mono",
+        "timeout": 180,
+    },
+    {
+        "group": "dotnet",
+        "requires": "linux",
+        "key": "net-linux-debug",
+        "os": "ubuntu-latest",
+        "platform": "linux",
+        "target": "template_debug",
+        "variant": "mono",
+        "mono_flag": YES_MONO,
+        "bin_suffix": ".mono",
+        "scons_extra": "use_static_cpp=no",
+        "artifact_glob": "godot/bin/godot.linuxbsd.template_*.x86_64.mono",
+        "timeout": 180,
+    },
+    {
+        "group": "dotnet",
+        "requires": "android",
+        "key": "net-android-arm32",
+        "os": "ubuntu-latest",
+        "platform": "android",
+        "arch": "arm32",
+        "variant": "mono",
+        "mono_flag": YES_MONO,
+        "bin_suffix": "",
+        "scons_extra": "",
+        "artifact_glob": "android_libs/**",
+        "timeout": 180,
+    },
+    {
+        "group": "dotnet",
+        "requires": "android",
+        "key": "net-android-arm64",
+        "os": "ubuntu-latest",
+        "platform": "android",
+        "arch": "arm64",
+        "variant": "mono",
+        "mono_flag": YES_MONO,
+        "bin_suffix": "",
+        "scons_extra": "",
+        "artifact_glob": "android_libs/**",
+        "timeout": 180,
+    },
+    {
+        "group": "dotnet",
+        "requires": "android",
+        "key": "net-android-x86_64",
+        "os": "ubuntu-latest",
+        "platform": "android",
+        "arch": "x86_64",
+        "variant": "mono",
+        "mono_flag": YES_MONO,
+        "bin_suffix": "",
+        "scons_extra": "",
+        "artifact_glob": "android_libs/**",
+        "timeout": 180,
+    },
+    {
+        "group": "dotnet",
+        "requires": "ios",
+        "key": "net-ios",
+        "os": "macos-26",
+        "platform": "ios",
+        "target": "template_release",
+        "variant": "mono",
+        "mono_flag": YES_MONO,
+        "bin_suffix": "",
+        "scons_extra": "",
+        "artifact_glob": "ios_out/**",
+        "timeout": 300,
+    },
+    {
+        "group": "dotnet",
+        "requires": "macos",
+        "key": "net-macos-release",
+        "os": "macos-26",
+        "platform": "macos",
+        "target": "template_release",
+        "short_target": "release",
+        "variant": "mono",
+        "mono_flag": YES_MONO,
+        "bin_suffix": ".mono",
+        "scons_extra": "debug_symbols=no",
+        "artifact_glob": "macos_out/**",
+        "timeout": 300,
+    },
+    {
+        "group": "dotnet",
+        "requires": "macos",
+        "key": "net-macos-debug",
+        "os": "macos-26",
+        "platform": "macos",
+        "target": "template_debug",
+        "short_target": "debug",
+        "variant": "mono",
+        "mono_flag": YES_MONO,
+        "bin_suffix": ".mono",
         "scons_extra": "debug_symbols=yes",
         "artifact_glob": "macos_out/**",
         "timeout": 300,
     },
 ]
+
+
+def fail(message: str) -> None:
+    print(f"ERROR: {message}", file=sys.stderr)
+    sys.exit(1)
 
 
 def main() -> None:
@@ -137,14 +329,23 @@ def main() -> None:
 
     enabled = {group: getattr(args, group).strip().lower() in ("true", "1", "yes") for group in GROUPS}
     if not any(enabled.values()):
-        print("ERROR: no platforms selected, nothing to build.", file=sys.stderr)
-        sys.exit(1)
+        fail("No platforms selected, nothing to build.")
 
-    matrix = [
-        {key: value for key, value in entry.items() if key != "group"}
-        for entry in ENTRIES
-        if enabled[entry["group"]]
-    ]
+    matrix = []
+    for entry in ENTRIES:
+        if not enabled[entry["group"]]:
+            continue
+        if entry["group"] == "dotnet" and not enabled[entry["requires"]]:
+            continue
+        matrix.append({key: value for key, value in entry.items() if key not in ("group", "requires")})
+
+    if not matrix:
+        if enabled["dotnet"]:
+            fail(
+                "The .NET/mono option requires at least one base platform to be selected "
+                "(windows/linux/android/ios/macos)."
+            )
+        fail("No platforms selected, nothing to build.")
 
     payload = json.dumps({"include": matrix})
     github_output = os.environ.get("GITHUB_OUTPUT")
