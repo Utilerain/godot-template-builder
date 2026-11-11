@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Compute the export templates folder name from the checked-out Godot sources.
 
-Reads core/version.py (the source of truth for version numbers) and prints:
+Reads the engine's version.py (the source of truth for version numbers) and prints:
 
   template_dir=<major.minor[.patch]>.<status>
   version_txt=<same string>
+
+The file location varies across Godot versions: `version.py` at the repo root
+(4.4+), `core/version.py` in older versions. Both layouts are probed.
 
 The editor looks for templates in
 `export_templates/<GODOT_VERSION_FULL_CONFIG>/...` where the folder name is
@@ -18,15 +21,29 @@ so the script can be used with GITHUB_OUTPUT directly.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 
 ASSIGN_RE = re.compile(r"^(\w+)\s*=\s*(.+?)\s*$")
 
+CANDIDATES = ("version.py", os.path.join("core", "version.py"))
+
 
 def fail(message: str) -> None:
     print(f"ERROR: {message}", file=sys.stderr)
     sys.exit(1)
+
+
+def find_version_file(godot_dir: str) -> str:
+    for candidate in CANDIDATES:
+        path = os.path.join(godot_dir, candidate)
+        if os.path.isfile(path):
+            return path
+    fail(
+        f"version.py not found in '{godot_dir}' (tried: {', '.join(CANDIDATES)}). "
+        "Is this a Godot source checkout?"
+    )
 
 
 def parse_version_file(path: str) -> dict:
@@ -51,16 +68,17 @@ def parse_version_file(path: str) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Compute export templates folder name from Godot sources.")
-    parser.add_argument("--version-file", default="godot/core/version.py")
+    parser.add_argument("--godot-dir", default="godot", help="Checked-out Godot sources directory.")
     args = parser.parse_args()
 
-    fields = parse_version_file(args.version_file)
+    path = find_version_file(args.godot_dir)
+    fields = parse_version_file(path)
     major, minor, status = fields["major"], fields["minor"], fields["status"]
     patch = fields.get("patch", "0")
     try:
         patch_num = int(patch)
     except ValueError:
-        fail(f"Unexpected patch value in {args.version_file}: '{patch}'")
+        fail(f"Unexpected patch value in {path}: '{patch}'")
 
     if status != "stable":
         fail(f"Refusing to package non-stable status '{status}': only stable builds are supported.")
@@ -68,7 +86,7 @@ def main() -> None:
     template_dir = f"{major}.{minor}" + (f".{patch_num}" if patch_num else "") + f".{status}"
     print(f"template_dir={template_dir}")
     print(f"version_txt={template_dir}")
-    print(f"Godot {template_dir} parsed from {args.version_file}", file=sys.stderr)
+    print(f"Godot {template_dir} parsed from {path}", file=sys.stderr)
 
 
 if __name__ == "__main__":

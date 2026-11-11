@@ -305,7 +305,7 @@ jobs:
 
       - name: Compute template version from sources
         id: tpl
-        run: python scripts/make_version_txt.py --version-file godot/core/version.py >> "$GITHUB_OUTPUT"
+        run: python scripts/make_version_txt.py --godot-dir godot >> "$GITHUB_OUTPUT"
 
       - name: Prepare profile summary
         run: python scripts/prepare_profile.py --input profiles/build_profile.json --output .build/profile.gdbuild
