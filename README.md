@@ -1,6 +1,6 @@
 # godot-template-builder
 
-A repository template that automatically builds **custom Godot export templates** — aimed at UI-style applications. You decide what gets stripped out of the engine via a build profile created inside the Godot editor; the CI does the rest.
+A repository template that automatically builds **custom Godot export templates**. You decide what gets stripped out of the engine via a build profile created inside the Godot editor; the CI does the rest.
 
 Supported platforms: **Windows**, **Linux** (x86_64), **Web** (wasm32), **Android** (arm32/arm64/x86_64), **iOS** (arm64 device + x86_64 simulator), **macOS** (x86_64 + arm64). Windows and Linux are built by default; the rest are opt-in per run.
 
@@ -69,7 +69,7 @@ python scripts/validate_version.py --file GODOT_VERSION
 
 1. Open any project in Godot (the profile is created per project).
 2. **Project → Tools → Engine Compilation Configuration Editor**.
-3. Uncheck what you don't need. For a UI-only template that is typically: 3D classes (`Node3D` and descendants), physics, navigation, XR; audio if not needed. Start with **Detect from Project** — it auto-disables everything the project doesn't use — then review manually.
+3. Uncheck what you don't need — for example 3D classes (`Node3D` and descendants), physics, navigation, XR or audio, if your projects never use them. Start with **Detect from Project** — it auto-disables everything the project doesn't use — then review manually.
 4. **Save As** → `profiles/build_profile.json`, commit it.
 
 Details and the file format reference: [profiles/README.md](profiles/README.md).

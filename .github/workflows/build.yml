@@ -327,7 +327,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           gh release create "godot-$TAG" \
-            --title "Godot $TAG — custom export templates (UI-focused)" \
+            --title "Godot $TAG — custom export templates" \
             --notes-file RELEASE_NOTES.md \
             --latest \
             "Godot_v${TAG}_export_templates.tpz"

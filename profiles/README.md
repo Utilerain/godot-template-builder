@@ -8,7 +8,7 @@ This folder holds the **build profile** — the file that tells the compiler wha
 
 1. Open any project in Godot (the profile is created per project).
 2. Menu: **Project → Tools → Engine Compilation Configuration Editor**.
-3. Uncheck the features you don't need. For a UI-focused template you would typically disable: 3D classes (`Node3D` and its descendants), physics, navigation, XR; audio if not needed.
+3. Uncheck the features you don't need — for example 3D classes (`Node3D` and its descendants), physics, navigation, XR or audio, if your projects never use them.
    The **Detect from Project** button automatically detects what the project actually uses and disables the rest — start with it, then review the result manually.
 4. **Save As** → save the file into this folder as `build_profile.json`.
 5. **Commit the file** — CI builds the templates from it.
