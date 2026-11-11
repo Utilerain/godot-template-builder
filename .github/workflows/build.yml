@@ -295,11 +295,6 @@ jobs:
           repository: godotengine/godot
           ref: ${{ needs.validate.outputs.tag }}
           path: godot
-          sparse-checkout: |
-            core/version.py
-            misc/dist/macos_template.app
-          sparse-checkout-cone-mode: false
-          fetch-depth: 1
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
