@@ -1,0 +1,173 @@
+name: Build export templates
+
+on:
+  workflow_dispatch:
+    inputs:
+      extra_scons_args:
+        description: "Extra SCons args appended to each build (e.g. vulkan=no)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-export-templates-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate version & profile
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate pinned Godot version (stable only)
+        id: version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/validate_version.py --file GODOT_VERSION
+
+      - name: Check build profile
+        run: python scripts/prepare_profile.py --input profiles/build_profile.json --output .build/profile.gdbuild
+
+  build:
+    name: ${{ matrix.platform }} / ${{ matrix.target }}
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            target: template_release
+            artifact: godot/bin/godot.linuxbsd.template_release.x86_64
+            extra_args: use_static_cpp=yes debug_symbols=no
+          - os: ubuntu-latest
+            platform: linux
+            target: template_debug
+            artifact: godot/bin/godot.linuxbsd.template_debug.x86_64
+            extra_args: use_static_cpp=yes
+          - os: windows-latest
+            platform: windows
+            target: template_release
+            artifact: godot/bin/godot.windows.template_release.x86_64.exe
+            extra_args: debug_symbols=no
+          - os: windows-latest
+            platform: windows
+            target: template_debug
+            artifact: godot/bin/godot.windows.template_debug.x86_64.exe
+            extra_args: ""
+    env:
+      SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+      SCONS_CACHE_LIMIT: 4096
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache SCons build cache
+        uses: actions/cache@v4
+        with:
+          path: .scons-cache
+          key: scons-${{ matrix.platform }}-${{ matrix.target }}-${{ needs.validate.outputs.tag }}-${{ hashFiles('profiles/*.json') }}
+          restore-keys: |
+            scons-${{ matrix.platform }}-${{ matrix.target }}-${{ needs.validate.outputs.tag }}
+
+      - name: Install SCons
+        run: python -m pip install --upgrade scons
+
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config libx11-dev libxcursor-dev libxinerama-dev libgl1-mesa-dev libglu1-mesa-dev libasound2-dev libpulse-dev libudev-dev libxi-dev libxrandr-dev libwayland-dev libxkbcommon-dev
+
+      - name: Checkout Godot ${{ needs.validate.outputs.tag }}
+        uses: actions/checkout@v4
+        with:
+          repository: godotengine/godot
+          ref: ${{ needs.validate.outputs.tag }}
+          path: godot
+
+      - name: Prepare build profile
+        run: python scripts/prepare_profile.py --input profiles/build_profile.json --output .build/profile.gdbuild
+
+      - name: Build template
+        working-directory: godot
+        run: >
+          scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=x86_64
+          module_mono_enabled=no progress=no
+          build_profile=../.build/profile.gdbuild
+          ${{ matrix.extra_args }}
+          ${{ inputs.extra_scons_args }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: template-${{ matrix.platform }}-${{ matrix.target }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+
+  package-release:
+    name: Package & publish release
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.validate.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Checkout Godot sources (version metadata)
+        uses: actions/checkout@v4
+        with:
+          repository: godotengine/godot
+          ref: ${{ needs.validate.outputs.tag }}
+          path: godot
+          sparse-checkout: core/version.py
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: template-*
+          path: artifacts
+          merge-multiple: false
+
+      - name: Compute template version from sources
+        id: tpl
+        run: python scripts/make_version_txt.py --version-file godot/core/version.py >> "$GITHUB_OUTPUT"
+
+      - name: Prepare profile summary
+        run: python scripts/prepare_profile.py --input profiles/build_profile.json --output .build/profile.gdbuild
+
+      - name: Assemble template package
+        run: python scripts/package_templates.py --tpl-dir "${{ steps.tpl.outputs.template_dir }}" --tag "$TAG"
+
+      - name: Generate release notes
+        run: python scripts/make_release_notes.py --tag "$TAG" --tpl-dir "${{ steps.tpl.outputs.template_dir }}" --repo-sha "${{ github.sha }}" --output RELEASE_NOTES.md
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create "godot-$TAG" \
+            --title "Godot $TAG — custom export templates (Windows/Linux, UI-focused)" \
+            --notes-file RELEASE_NOTES.md \
+            --latest \
+            "Godot_v${TAG}_export_templates.tpz"

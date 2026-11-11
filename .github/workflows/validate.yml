@@ -1,0 +1,34 @@
+name: Validate
+
+on:
+  push:
+    paths:
+      - GODOT_VERSION
+      - "scripts/**"
+      - "profiles/**"
+      - ".github/workflows/validate.yml"
+  pull_request:
+    paths:
+      - GODOT_VERSION
+      - "scripts/**"
+      - "profiles/**"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Validate version & profile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate pinned Godot version (stable only)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/validate_version.py --file GODOT_VERSION
+
+      - name: Check build profile
+        run: python scripts/prepare_profile.py --input profiles/build_profile.json --output .build/profile.gdbuild
