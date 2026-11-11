@@ -1,0 +1,8 @@
+# Normalize line endings: CI runs on Linux, keep everything LF in the repo.
+* text=auto
+*.py text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
+GODOT_VERSION text eol=lf
