@@ -34,24 +34,25 @@ EXEC = 0o755
 NORM = 0o644
 
 # (artifact dir, file inside the artifact, file inside the .tpz, permission mode)
+# Artifact dirs are named "template-<matrix key>" by the build workflow.
 FLAT_FILES = [
     # Windows (incl. console wrappers, as in the official templates)
-    ("template-windows-template_release", "godot.windows.template_release.x86_64.exe", "windows_release_x86_64.exe", NORM),
-    ("template-windows-template_release", "godot.windows.template_release.x86_64.console.exe", "windows_release_x86_64_console.exe", NORM),
-    ("template-windows-template_debug", "godot.windows.template_debug.x86_64.exe", "windows_debug_x86_64.exe", NORM),
-    ("template-windows-template_debug", "godot.windows.template_debug.x86_64.console.exe", "windows_debug_x86_64_console.exe", NORM),
+    ("template-windows-release", "godot.windows.template_release.x86_64.exe", "windows_release_x86_64.exe", NORM),
+    ("template-windows-release", "godot.windows.template_release.x86_64.console.exe", "windows_release_x86_64_console.exe", NORM),
+    ("template-windows-debug", "godot.windows.template_debug.x86_64.exe", "windows_debug_x86_64.exe", NORM),
+    ("template-windows-debug", "godot.windows.template_debug.x86_64.console.exe", "windows_debug_x86_64_console.exe", NORM),
     # Linux
-    ("template-linux-template_release", "godot.linuxbsd.template_release.x86_64", "linux_release.x86_64", EXEC),
-    ("template-linux-template_debug", "godot.linuxbsd.template_debug.x86_64", "linux_debug.x86_64", EXEC),
+    ("template-linux-release", "godot.linuxbsd.template_release.x86_64", "linux_release.x86_64", EXEC),
+    ("template-linux-debug", "godot.linuxbsd.template_debug.x86_64", "linux_debug.x86_64", EXEC),
     # Web (all eight official wasm32 variants)
-    ("template-web-template_release", "godot.web.template_release.wasm32.zip", "web_release.zip", NORM),
-    ("template-web-template_release", "godot.web.template_release.wasm32.nothreads.zip", "web_nothreads_release.zip", NORM),
-    ("template-web-template_release", "godot.web.template_release.wasm32.dlink.zip", "web_dlink_release.zip", NORM),
-    ("template-web-template_release", "godot.web.template_release.wasm32.nothreads.dlink.zip", "web_dlink_nothreads_release.zip", NORM),
-    ("template-web-template_release", "godot.web.template_debug.wasm32.zip", "web_debug.zip", NORM),
-    ("template-web-template_release", "godot.web.template_debug.wasm32.nothreads.zip", "web_nothreads_debug.zip", NORM),
-    ("template-web-template_release", "godot.web.template_debug.wasm32.dlink.zip", "web_dlink_debug.zip", NORM),
-    ("template-web-template_release", "godot.web.template_debug.wasm32.nothreads.dlink.zip", "web_dlink_nothreads_debug.zip", NORM),
+    ("template-web", "godot.web.template_release.wasm32.zip", "web_release.zip", NORM),
+    ("template-web", "godot.web.template_release.wasm32.nothreads.zip", "web_nothreads_release.zip", NORM),
+    ("template-web", "godot.web.template_release.wasm32.dlink.zip", "web_dlink_release.zip", NORM),
+    ("template-web", "godot.web.template_release.wasm32.nothreads.dlink.zip", "web_dlink_nothreads_release.zip", NORM),
+    ("template-web", "godot.web.template_debug.wasm32.zip", "web_debug.zip", NORM),
+    ("template-web", "godot.web.template_debug.wasm32.nothreads.zip", "web_nothreads_debug.zip", NORM),
+    ("template-web", "godot.web.template_debug.wasm32.dlink.zip", "web_dlink_debug.zip", NORM),
+    ("template-web", "godot.web.template_debug.wasm32.nothreads.dlink.zip", "web_dlink_nothreads_debug.zip", NORM),
     # Android (produced by the gradle packaging job)
     ("template-android", "android_release.apk", "android_release.apk", NORM),
     ("template-android", "android_debug.apk", "android_debug.apk", NORM),
@@ -62,10 +63,10 @@ FLAT_FILES = [
 
 # macOS: assembled from the app-bundle template in the Godot sources + built executables.
 MACOS_FILES = [
-    ("template-macos-template_release", "godot_macos_release.arm64"),
-    ("template-macos-template_release", "godot_macos_release.x86_64"),
-    ("template-macos-template_debug", "godot_macos_debug.arm64"),
-    ("template-macos-template_debug", "godot_macos_debug.x86_64"),
+    ("template-macos-release", "godot_macos_release.arm64"),
+    ("template-macos-release", "godot_macos_release.x86_64"),
+    ("template-macos-debug", "godot_macos_debug.arm64"),
+    ("template-macos-debug", "godot_macos_debug.x86_64"),
 ]
 
 
@@ -152,7 +153,12 @@ def main() -> None:
     staged = stage_flat(stage, args.artifacts, included)
     staged += assemble_macos(stage, args.artifacts, args.dist_dir, included)
     if not staged:
-        fail("none of the downloaded artifacts map to template files")
+        fail(
+            "none of the downloaded artifacts map to template files.\n"
+            f"Artifact dirs seen: {', '.join(included)}\n"
+            "Expected dirs like: template-windows-release, template-linux-release, "
+            "template-web, template-android, template-ios, template-macos-release, ..."
+        )
 
     with open(os.path.join(stage, "version.txt"), "w", encoding="utf-8", newline="") as fh:
         fh.write(args.tpl_dir)
