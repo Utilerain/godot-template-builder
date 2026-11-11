@@ -1,0 +1,9 @@
+# Local build/test artifacts
+*.tpz
+.build/
+.tmp/
+__pycache__/
+*.pyc
+
+# NOTE: profiles/build_profile.json is intentionally NOT ignored —
+# commit it, CI builds the templates from this file.

@@ -1,0 +1,8 @@
+# Godot version used to build the export templates.
+#
+# Format:  <major.minor[.patch]>-stable     (e.g. 4.7.2-stable, 4.3-stable)
+#
+# NOTE: ONLY stable Godot releases >= 4.1 are supported.
+# dev/beta/rc versions are rejected by the validator and the build will not start.
+# The validator checks that the tag exists at https://github.com/godotengine/godot
+4.7.2-stable
