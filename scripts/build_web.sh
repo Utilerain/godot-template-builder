@@ -27,9 +27,21 @@ mkdir -p "$SRC/bin"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+EXPECTED_ZIPS=(
+  godot.web.template_release.wasm32.zip
+  godot.web.template_release.wasm32.nothreads.zip
+  godot.web.template_release.wasm32.dlink.zip
+  godot.web.template_release.wasm32.nothreads.dlink.zip
+  godot.web.template_debug.wasm32.zip
+  godot.web.template_debug.wasm32.nothreads.zip
+  godot.web.template_debug.wasm32.dlink.zip
+  godot.web.template_debug.wasm32.nothreads.dlink.zip
+)
+
 for variant in "${VARIANTS[@]}"; do
   variant_tag="${variant// /_}"
   echo "=== Web wave: $variant ==="
+  pids=()
   for target in template_release template_debug; do
     dir="$WORK/${variant_tag}_${target}"
     cp -r "$SRC" "$dir"
@@ -39,10 +51,25 @@ for variant in "${VARIANTS[@]}"; do
         progress=no -j"$JOBS" $variant $EXTRA_ARGS
       cp bin/godot.web.*.zip "$SRC/bin/"
     ) &
+    pids+=("$!")
   done
-  wait
+  # set -e does not see background job failures; wait on each PID explicitly.
+  wave_failed=0
+  for pid in "${pids[@]}"; do
+    wait "$pid" || wave_failed=1
+  done
+  if [ "$wave_failed" -ne 0 ]; then
+    echo "ERROR: web wave failed: $variant" >&2
+    exit 1
+  fi
   echo "=== Web wave done: $variant ==="
 done
 
 echo "Web template zips:"
+for name in "${EXPECTED_ZIPS[@]}"; do
+  if [ ! -f "$SRC/bin/$name" ]; then
+    echo "ERROR: web build did not produce $name" >&2
+    exit 1
+  fi
+done
 ls -l "$SRC/bin/"

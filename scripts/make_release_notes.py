@@ -9,6 +9,11 @@ import sys
 import zipfile
 
 
+def fail(message: str) -> None:
+    print(f"ERROR: {message}", file=sys.stderr)
+    sys.exit(1)
+
+
 def build_profile_section(profile_path: str) -> str:
     try:
         with open(profile_path, "r", encoding="utf-8") as fh:
@@ -38,16 +43,18 @@ def build_profile_section(profile_path: str) -> str:
     )
 
 
-def list_tpz_contents(tpz_path: str) -> list[tuple[str, int]]:
-    """List template files inside the .tpz as (file name, size) tuples."""
+def list_tpz_contents(tpz_path: str) -> tuple[str, list[tuple[str, int]]]:
+    """List template files inside the .tpz as ((template folder), [(file name, size), ...])."""
     entries = []
+    folder = ""
     with zipfile.ZipFile(tpz_path) as archive:
         for name in archive.namelist():
             parts = name.split("/")
             # templates/<folder>/<file> — top-level template files only
             if len(parts) == 3 and parts[0] == "templates" and parts[2] != "version.txt":
-                entries.append((name[len(f"templates/{parts[1]}/"):], archive.getinfo(name).file_size))
-    return sorted(entries)
+                folder = parts[1]
+                entries.append((name[len(f"templates/{folder}/"):], archive.getinfo(name).file_size))
+    return folder, sorted(entries)
 
 
 def format_size(size: int) -> str:
@@ -56,29 +63,30 @@ def format_size(size: int) -> str:
     return f"{size / 1024:.0f} KiB"
 
 
-def package_section(tpz_path: str) -> str:
-    entries = list_tpz_contents(tpz_path)
+def package_section(tpz_path: str, tpl_dir: str) -> str:
+    folder, entries = list_tpz_contents(tpz_path)
+    if not entries or not folder:
+        fail(f"{tpz_path}: no template files found inside the archive (expected templates/<folder>/<file> entries)")
+    if tpl_dir and folder not in (tpl_dir, f"{tpl_dir}.mono"):
+        fail(
+            f"{tpz_path}: template folder inside the archive is '{folder}', "
+            f"expected '{tpl_dir}' (standard) or '{tpl_dir}.mono' (mono)"
+        )
     rows = "\n".join(f"| `{name}` | {format_size(size)} |" for name, size in entries)
-    return f"\n#### `{tpz_path}` (folder `{folder_of(entries)}`)\n\n| File | Size |\n| --- | --- |\n{rows}\n"
-
-
-def folder_of(entries: list[tuple[str, int]]) -> str:
-    # Folder suffix comes from the packaging step; reconstruct it from known names.
-    if any(name == "icudt_godot.dat" for name, _size in entries):
-        return "<version>.<status>.mono"
-    return "<version>.<status>"
+    return f"\n#### `{tpz_path}` (folder `{folder}`)\n\n| File | Size |\n| --- | --- |\n{rows}\n"
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate release notes markdown.")
     parser.add_argument("--tag", required=True, help="Godot tag, e.g. 4.7.2-stable")
     parser.add_argument("--tpz", required=True, action="append", help="Path to an assembled .tpz (repeatable)")
+    parser.add_argument("--tpl-dir", default="", help="Expected template folder name, e.g. 4.7.2.stable (cross-checked against each archive)")
     parser.add_argument("--profile", default=".build/profile.gdbuild")
     parser.add_argument("--repo-sha", default="", help="Commit SHA of this repository used for the build")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
 
-    packages = "\n".join(package_section(path) for path in args.tpz)
+    packages = "\n".join(package_section(path, args.tpl_dir) for path in args.tpz)
     mono_note = ""
     if len(args.tpz) > 1:
         mono_note = (

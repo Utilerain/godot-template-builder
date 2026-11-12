@@ -15,7 +15,7 @@ Layout matches the official export templates package:
       android_source.zip
       ios.zip
       macos.zip                                (universal binaries inside)
-      icudt_godot.dat                          (mono variant only)
+      icudt_godot.dat
       version.txt
 
 Only the platforms whose artifacts were downloaded are included; having no
@@ -42,11 +42,12 @@ NORM = 0o644
 # (artifact dir, file inside the artifact, file inside the .tpz, permission mode)
 # Artifact dirs are named "template-<matrix key>" by the build workflow.
 STANDARD_FLAT_FILES = [
-    # Windows (incl. console wrappers, as in the official templates)
-    ("template-windows-release", "godot.windows.template_release.x86_64.exe", "windows_release_x86_64.exe", NORM),
-    ("template-windows-release", "godot.windows.template_release.x86_64.console.exe", "windows_release_x86_64_console.exe", NORM),
-    ("template-windows-debug", "godot.windows.template_debug.x86_64.exe", "windows_debug_x86_64.exe", NORM),
-    ("template-windows-debug", "godot.windows.template_debug.x86_64.console.exe", "windows_debug_x86_64_console.exe", NORM),
+    # Windows (incl. console wrappers, as in the official templates; the
+    # official package stores the .exe files with mode 0755)
+    ("template-windows-release", "godot.windows.template_release.x86_64.exe", "windows_release_x86_64.exe", EXEC),
+    ("template-windows-release", "godot.windows.template_release.x86_64.console.exe", "windows_release_x86_64_console.exe", EXEC),
+    ("template-windows-debug", "godot.windows.template_debug.x86_64.exe", "windows_debug_x86_64.exe", EXEC),
+    ("template-windows-debug", "godot.windows.template_debug.x86_64.console.exe", "windows_debug_x86_64_console.exe", EXEC),
     # Linux
     ("template-linux-release", "godot.linuxbsd.template_release.x86_64", "linux_release.x86_64", EXEC),
     ("template-linux-debug", "godot.linuxbsd.template_debug.x86_64", "linux_debug.x86_64", EXEC),
@@ -68,10 +69,10 @@ STANDARD_FLAT_FILES = [
 ]
 
 MONO_FLAT_FILES = [
-    ("template-net-windows-release", "godot.windows.template_release.x86_64.mono.exe", "windows_release_x86_64.exe", NORM),
-    ("template-net-windows-release", "godot.windows.template_release.x86_64.mono.console.exe", "windows_release_x86_64_console.exe", NORM),
-    ("template-net-windows-debug", "godot.windows.template_debug.x86_64.mono.exe", "windows_debug_x86_64.exe", NORM),
-    ("template-net-windows-debug", "godot.windows.template_debug.x86_64.mono.console.exe", "windows_debug_x86_64_console.exe", NORM),
+    ("template-net-windows-release", "godot.windows.template_release.x86_64.mono.exe", "windows_release_x86_64.exe", EXEC),
+    ("template-net-windows-release", "godot.windows.template_release.x86_64.mono.console.exe", "windows_release_x86_64_console.exe", EXEC),
+    ("template-net-windows-debug", "godot.windows.template_debug.x86_64.mono.exe", "windows_debug_x86_64.exe", EXEC),
+    ("template-net-windows-debug", "godot.windows.template_debug.x86_64.mono.console.exe", "windows_debug_x86_64_console.exe", EXEC),
     ("template-net-linux-release", "godot.linuxbsd.template_release.x86_64.mono", "linux_release.x86_64", EXEC),
     ("template-net-linux-debug", "godot.linuxbsd.template_debug.x86_64.mono", "linux_debug.x86_64", EXEC),
     ("template-net-android", "android_release.apk", "android_release.apk", NORM),
@@ -161,7 +162,7 @@ def main() -> None:
     parser.add_argument("--tag", required=True, help="Godot tag, e.g. 4.7.2-stable")
     parser.add_argument("--artifacts", default="artifacts", help="Directory with downloaded CI artifacts")
     parser.add_argument("--dist-dir", default=None, help="Path to godot misc/dist (needed when macOS is built)")
-    parser.add_argument("--icudt", default=None, help="Path to icudt_godot.dat (mono variant)")
+    parser.add_argument("--icudt", default=None, help="Path to icudt_godot.dat (official packages include it in both variants)")
     parser.add_argument("--output", default=".", help="Directory for the resulting .tpz")
     args = parser.parse_args()
 
@@ -186,19 +187,25 @@ def main() -> None:
         tpl_folder = args.tpl_dir
         out_name = f"Godot_v{args.tag}_export_templates.tpz"
 
-    stage = os.path.join(".build", "stage", "templates", tpl_folder)
-    shutil.rmtree(stage, ignore_errors=True)
+    stage_root = os.path.join(".build", "stage")
+    stage = os.path.join(stage_root, "templates", tpl_folder)
+    # The mono pass runs in the same workspace right after the standard pass,
+    # so wipe the whole stage root — leftover folders from the other variant
+    # must not leak into this archive (the editor resolves the version from
+    # whichever version.txt it hits first).
+    shutil.rmtree(stage_root, ignore_errors=True)
     os.makedirs(stage, exist_ok=True)
 
     staged = stage_flat(stage, args.artifacts, flat_files, included)
     staged += assemble_macos(stage, args.artifacts, args.dist_dir, macos_files, included)
 
-    if args.variant == "mono":
-        if args.icudt and os.path.isfile(args.icudt):
-            shutil.copyfile(args.icudt, os.path.join(stage, "icudt_godot.dat"))
-            staged.append(("icudt_godot.dat", NORM))
-        else:
-            warn("icudt_godot.dat not found - .NET globalization data will be missing from the package.")
+    # The official packages include icudt_godot.dat in both variants; without it
+    # exported projects lack ICU globalization data (text shaping, locales).
+    if args.icudt and os.path.isfile(args.icudt):
+        shutil.copyfile(args.icudt, os.path.join(stage, "icudt_godot.dat"))
+        staged.append(("icudt_godot.dat", NORM))
+    else:
+        warn("icudt_godot.dat not found - .NET globalization data will be missing from the package.")
 
     if not staged:
         fail(
@@ -214,7 +221,7 @@ def main() -> None:
 
     os.makedirs(args.output, exist_ok=True)
     out_path = os.path.join(args.output, out_name)
-    zip_root = os.path.join(".build", "stage")
+    zip_root = stage_root
     exec_names = {dst for dst, mode in staged if mode == EXEC}
     with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for root, _dirs, files in os.walk(zip_root):

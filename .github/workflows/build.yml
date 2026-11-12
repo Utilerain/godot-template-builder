@@ -146,7 +146,8 @@ jobs:
         run: |
           mkdir -p ../glue_out
           ./bin/godot.linuxbsd.editor.x86_64.mono --headless --generate-mono-glue ../glue_out
-          find ../glue_out -type f | head -10
+          # "|| true": find gets SIGPIPE from head, which fails the step under pipefail.
+          find ../glue_out -type f | head -10 || true
           test -f ../glue_out/GodotSharp/GodotSharp/Generated/GodotSharpGenerated.cs
 
       - name: Upload glue artifact
@@ -232,18 +233,42 @@ jobs:
       - name: Copy mono glue into sources
         if: matrix.variant == 'mono'
         run: |
+          # The official mono flow copies both generated API assemblies before
+          # building the mono templates.
           cp -r glue_artifacts/GodotSharp/GodotSharp/Generated godot/modules/mono/glue/GodotSharp/GodotSharp/
-          find godot/modules/mono/glue/GodotSharp/GodotSharp/Generated -type f | head -5
+          cp -r glue_artifacts/GodotSharp/GodotSharpEditor/Generated godot/modules/mono/glue/GodotSharp/GodotSharpEditor/
+          find godot/modules/mono/glue/GodotSharp -name "*.cs" -type f | head -5 || true
 
-      - name: Build (Windows/Linux)
-        if: matrix.platform == 'windows' || matrix.platform == 'linux'
+      - name: Build (Linux)
+        if: matrix.platform == 'linux'
         working-directory: godot
-        run: >
-          scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=x86_64
-          ${{ matrix.mono_flag }} progress=no
-          build_profile=../.build/profile.gdbuild
-          ${{ matrix.scons_extra }}
-          ${{ inputs.extra_scons_args }}
+        run: |
+          # Official templates ship with AccessKit support; the SDK degrades
+          # gracefully to accesskit=no on Linux if the download fails.
+          python misc/scripts/install_accesskit.py || echo "::warning::AccessKit SDK installation failed, building without AccessKit support."
+          scons platform=linux target=${{ matrix.target }} arch=x86_64 production=yes \
+            ${{ matrix.mono_flag }} progress=no \
+            build_profile=../.build/profile.gdbuild \
+            ${{ matrix.scons_extra }} ${{ inputs.extra_scons_args }}
+
+      - name: Build (Windows)
+        if: matrix.platform == 'windows'
+        working-directory: godot
+        run: |
+          # d3d12/angle/accesskit are on by default for Windows and hard-fail the
+          # build when their SDKs are missing; install them like the official CI
+          # does, degrading to the =no flag on failure.
+          D3D12=yes
+          ANGLE=yes
+          AK=yes
+          python misc/scripts/install_d3d12_sdk_windows.py || D3D12=no
+          python misc/scripts/install_angle.py || ANGLE=no
+          python misc/scripts/install_accesskit.py || AK=no
+          scons platform=windows target=${{ matrix.target }} arch=x86_64 production=yes \
+            ${{ matrix.mono_flag }} progress=no \
+            build_profile=../.build/profile.gdbuild \
+            d3d12=$D3D12 angle=$ANGLE accesskit=$AK \
+            ${{ matrix.scons_extra }} ${{ inputs.extra_scons_args }}
 
       - name: Build (Web, all eight variants)
         if: matrix.platform == 'web'
@@ -282,6 +307,9 @@ jobs:
 
       - name: Package (iOS)
         if: matrix.platform == 'ios'
+        env:
+          # package_ios.sh defaults to <godot>/ios_out; upload glob is relative to the workspace root.
+          IOS_OUT_DIR: ${{ github.workspace }}/ios_out
         run: bash scripts/package_ios.sh godot
 
       - name: Build (macOS, ${{ matrix.target }})
@@ -481,7 +509,7 @@ jobs:
         run: python scripts/prepare_profile.py --input profiles/build_profile.json --output .build/profile.gdbuild
 
       - name: Assemble template package
-        run: python scripts/package_templates.py --variant standard --tpl-dir "${{ steps.tpl.outputs.template_dir }}" --tag "$TAG" --artifacts artifacts --dist-dir godot/misc/dist --output .
+        run: python scripts/package_templates.py --variant standard --tpl-dir "${{ steps.tpl.outputs.template_dir }}" --tag "$TAG" --artifacts artifacts --dist-dir godot/misc/dist --icudt godot/thirdparty/icu4c/icudt_godot.dat --output .
 
       - name: Assemble mono template package
         if: needs.validate.outputs.dotnet == 'true'
