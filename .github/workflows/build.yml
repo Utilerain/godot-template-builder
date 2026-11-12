@@ -148,7 +148,10 @@ jobs:
           ./bin/godot.linuxbsd.editor.x86_64.mono --headless --generate-mono-glue ../glue_out
           # "|| true": find gets SIGPIPE from head, which fails the step under pipefail.
           find ../glue_out -type f | head -10 || true
-          test -f ../glue_out/GodotSharp/GodotSharp/Generated/GodotSharpGenerated.cs
+          # Sentinels for both generated API assemblies (modules/mono/editor/bindings_generator.h:
+          # BINDINGS_CLASS_NATIVECALLS / BINDINGS_CLASS_NATIVECALLS_EDITOR).
+          test -f ../glue_out/GodotSharp/GodotSharp/Generated/NativeCalls.cs
+          test -f ../glue_out/GodotSharp/GodotSharpEditor/Generated/EditorNativeCalls.cs
 
       - name: Upload glue artifact
         uses: actions/upload-artifact@v4
