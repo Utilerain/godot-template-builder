@@ -235,6 +235,7 @@ jobs:
 
       - name: Copy mono glue into sources
         if: matrix.variant == 'mono'
+        shell: bash
         run: |
           # The official mono flow copies both generated API assemblies before
           # building the mono templates.
@@ -257,6 +258,7 @@ jobs:
       - name: Build (Windows)
         if: matrix.platform == 'windows'
         working-directory: godot
+        shell: bash
         run: |
           # d3d12/angle/accesskit are on by default for Windows and hard-fail the
           # build when their SDKs are missing; install them like the official CI
@@ -534,8 +536,22 @@ jobs:
         run: |
           mkdir -p dist
           cp Godot_v*_export_templates.tpz dist/
-          gh release create "godot-$TAG" \
-            --title "Godot $TAG — custom export templates" \
-            --notes-file RELEASE_NOTES.md \
-            --latest \
-            dist/*
+          {
+            echo ""
+            echo "---"
+            echo "Built on $(date -u '+%Y-%m-%d %H:%M UTC') from commit \`${GITHUB_SHA::12}\` by [run #$GITHUB_RUN_NUMBER]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+          } >> RELEASE_NOTES.md
+          TITLE="Godot $TAG — custom export templates"
+          if gh release view "godot-$TAG" > /dev/null 2>&1; then
+            # Re-run for the same version: replace all assets and refresh the
+            # notes, so stale assets from an earlier run can not survive.
+            gh release view "godot-$TAG" --json assets --jq '.assets[].name' | while read -r asset; do
+              gh release delete-asset "godot-$TAG" "$asset" --yes
+            done
+            gh release upload "godot-$TAG" --clobber dist/*
+            gh release edit "godot-$TAG" --title "$TITLE" --notes-file RELEASE_NOTES.md --latest
+            echo "Updated existing release godot-$TAG"
+          else
+            gh release create "godot-$TAG" --title "$TITLE" --notes-file RELEASE_NOTES.md --latest dist/*
+            echo "Created release godot-$TAG"
+          fi
