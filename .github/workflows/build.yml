@@ -46,7 +46,7 @@ concurrency:
 jobs:
   validate:
     name: Validate & plan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       tag: ${{ steps.version.outputs.tag }}
       matrix: ${{ steps.matrix.outputs.matrix }}
@@ -91,7 +91,7 @@ jobs:
     name: net / mono glue (linux editor)
     needs: validate
     if: inputs.build_dotnet == true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 240
     env:
       SCONS_CACHE: ${{ github.workspace }}/.scons-cache
@@ -347,7 +347,7 @@ jobs:
     name: android / gradle packaging
     needs: [validate, build]
     if: always() && needs.validate.result == 'success' && needs.build.result == 'success' && contains(needs.validate.outputs.matrix, '"android-')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -409,7 +409,7 @@ jobs:
     name: net / android gradle packaging
     needs: [validate, build]
     if: always() && needs.validate.result == 'success' && needs.build.result == 'success' && contains(needs.validate.outputs.matrix, '"net-android-')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -476,7 +476,7 @@ jobs:
       always() && needs.validate.result == 'success' && needs.build.result == 'success'
       && (needs.android-gradle.result == 'success' || needs.android-gradle.result == 'skipped')
       && (needs.net-android-gradle.result == 'success' || needs.net-android-gradle.result == 'skipped')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       TAG: ${{ needs.validate.outputs.tag }}

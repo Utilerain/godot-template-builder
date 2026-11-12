@@ -19,6 +19,18 @@ import sys
 
 GROUPS = ("windows", "linux", "web", "android", "ios", "macos", "dotnet")
 
+# Runner images are pinned, not "-latest": GitHub rolls the -latest label to a
+# new OS release (ubuntu-latest moved 24.04 -> 26.04 around 2026-11-12, and the
+# 26.04 toolchain broke the embree link of the mono editor). Runner choices
+# follow the official Godot CI for 4.x: native Linux builds on ubuntu-22.04
+# ("stay one LTS before latest" — also keeps the glibc requirement of the
+# shipped templates low), android/web on ubuntu-24.04, windows on windows-latest
+# (same label the official Windows CI uses).
+RUNNER_LINUX = "ubuntu-22.04"
+RUNNER_UBUNTU = "ubuntu-24.04"
+RUNNER_WINDOWS = "windows-latest"
+RUNNER_MACOS = "macos-26"
+
 NO_MONO = "module_mono_enabled=no"
 YES_MONO = "module_mono_enabled=yes"
 
@@ -27,7 +39,7 @@ ENTRIES = [
     {
         "group": "windows",
         "key": "windows-release",
-        "os": "windows-latest",
+        "os": RUNNER_WINDOWS,
         "platform": "windows",
         "target": "template_release",
         "variant": "standard",
@@ -40,7 +52,7 @@ ENTRIES = [
     {
         "group": "windows",
         "key": "windows-debug",
-        "os": "windows-latest",
+        "os": RUNNER_WINDOWS,
         "platform": "windows",
         "target": "template_debug",
         "variant": "standard",
@@ -53,7 +65,7 @@ ENTRIES = [
     {
         "group": "linux",
         "key": "linux-release",
-        "os": "ubuntu-latest",
+        "os": RUNNER_LINUX,
         "platform": "linux",
         "target": "template_release",
         "variant": "standard",
@@ -66,7 +78,7 @@ ENTRIES = [
     {
         "group": "linux",
         "key": "linux-debug",
-        "os": "ubuntu-latest",
+        "os": RUNNER_LINUX,
         "platform": "linux",
         "target": "template_debug",
         "variant": "standard",
@@ -79,7 +91,7 @@ ENTRIES = [
     {
         "group": "web",
         "key": "web",
-        "os": "ubuntu-latest",
+        "os": RUNNER_UBUNTU,
         "platform": "web",
         "target": "template_release",
         "variant": "standard",
@@ -92,7 +104,7 @@ ENTRIES = [
     {
         "group": "android",
         "key": "android-arm32",
-        "os": "ubuntu-latest",
+        "os": RUNNER_UBUNTU,
         "platform": "android",
         "arch": "arm32",
         "variant": "standard",
@@ -105,7 +117,7 @@ ENTRIES = [
     {
         "group": "android",
         "key": "android-arm64",
-        "os": "ubuntu-latest",
+        "os": RUNNER_UBUNTU,
         "platform": "android",
         "arch": "arm64",
         "variant": "standard",
@@ -118,7 +130,7 @@ ENTRIES = [
     {
         "group": "android",
         "key": "android-x86_64",
-        "os": "ubuntu-latest",
+        "os": RUNNER_UBUNTU,
         "platform": "android",
         "arch": "x86_64",
         "variant": "standard",
@@ -131,7 +143,7 @@ ENTRIES = [
     {
         "group": "ios",
         "key": "ios",
-        "os": "macos-26",
+        "os": RUNNER_MACOS,
         "platform": "ios",
         "target": "template_release",
         "variant": "standard",
@@ -144,7 +156,7 @@ ENTRIES = [
     {
         "group": "macos",
         "key": "macos-release",
-        "os": "macos-26",
+        "os": RUNNER_MACOS,
         "platform": "macos",
         "target": "template_release",
         "short_target": "release",
@@ -158,7 +170,7 @@ ENTRIES = [
     {
         "group": "macos",
         "key": "macos-debug",
-        "os": "macos-26",
+        "os": RUNNER_MACOS,
         "platform": "macos",
         "target": "template_debug",
         "short_target": "debug",
@@ -175,7 +187,7 @@ ENTRIES = [
         "group": "dotnet",
         "requires": "windows",
         "key": "net-windows-release",
-        "os": "windows-latest",
+        "os": RUNNER_WINDOWS,
         "platform": "windows",
         "target": "template_release",
         "variant": "mono",
@@ -189,7 +201,7 @@ ENTRIES = [
         "group": "dotnet",
         "requires": "windows",
         "key": "net-windows-debug",
-        "os": "windows-latest",
+        "os": RUNNER_WINDOWS,
         "platform": "windows",
         "target": "template_debug",
         "variant": "mono",
@@ -203,7 +215,7 @@ ENTRIES = [
         "group": "dotnet",
         "requires": "linux",
         "key": "net-linux-release",
-        "os": "ubuntu-latest",
+        "os": RUNNER_LINUX,
         "platform": "linux",
         "target": "template_release",
         "variant": "mono",
@@ -217,7 +229,7 @@ ENTRIES = [
         "group": "dotnet",
         "requires": "linux",
         "key": "net-linux-debug",
-        "os": "ubuntu-latest",
+        "os": RUNNER_LINUX,
         "platform": "linux",
         "target": "template_debug",
         "variant": "mono",
@@ -231,7 +243,7 @@ ENTRIES = [
         "group": "dotnet",
         "requires": "android",
         "key": "net-android-arm32",
-        "os": "ubuntu-latest",
+        "os": RUNNER_UBUNTU,
         "platform": "android",
         "arch": "arm32",
         "variant": "mono",
@@ -245,7 +257,7 @@ ENTRIES = [
         "group": "dotnet",
         "requires": "android",
         "key": "net-android-arm64",
-        "os": "ubuntu-latest",
+        "os": RUNNER_UBUNTU,
         "platform": "android",
         "arch": "arm64",
         "variant": "mono",
@@ -259,7 +271,7 @@ ENTRIES = [
         "group": "dotnet",
         "requires": "android",
         "key": "net-android-x86_64",
-        "os": "ubuntu-latest",
+        "os": RUNNER_UBUNTU,
         "platform": "android",
         "arch": "x86_64",
         "variant": "mono",
@@ -273,7 +285,7 @@ ENTRIES = [
         "group": "dotnet",
         "requires": "ios",
         "key": "net-ios",
-        "os": "macos-26",
+        "os": RUNNER_MACOS,
         "platform": "ios",
         "target": "template_release",
         "variant": "mono",
@@ -287,7 +299,7 @@ ENTRIES = [
         "group": "dotnet",
         "requires": "macos",
         "key": "net-macos-release",
-        "os": "macos-26",
+        "os": RUNNER_MACOS,
         "platform": "macos",
         "target": "template_release",
         "short_target": "release",
@@ -302,7 +314,7 @@ ENTRIES = [
         "group": "dotnet",
         "requires": "macos",
         "key": "net-macos-debug",
-        "os": "macos-26",
+        "os": RUNNER_MACOS,
         "platform": "macos",
         "target": "template_debug",
         "short_target": "debug",

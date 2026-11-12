@@ -117,6 +117,7 @@ The editor picks templates up automatically when the folder version matches the 
 ## Limitations & notes
 
 - x86_64 only for Windows/Linux; no editor binaries are built (except the one-off Linux editor used to generate the mono glue for .NET packages).
+- Linux templates are built on Ubuntu 22.04 like the official CI, so they require glibc 2.35 or newer — about the same baseline as the official templates.
 - The .NET/mono variant does not include Web templates — upstream does not support .NET on Web.
 - Android x86_32 (legacy 32-bit) is not built.
 - Classes disabled in the build profile are removed at compile time; exporting a project that uses them fails at runtime. Test before you build.
