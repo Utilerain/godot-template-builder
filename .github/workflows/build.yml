@@ -359,6 +359,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -392,6 +396,12 @@ jobs:
           done
           find godot/platform/android/java/lib/libs -type f | sort
 
+      # Gradle's configure phase resolves "scons" from PATH even though the
+      # scons build tasks are excluded (the prebuilt libraries are packaged
+      # instead) — without it the build fails before any task runs.
+      - name: Install SCons
+        run: python -m pip install --upgrade scons
+
       - name: Generate Android templates
         working-directory: godot/platform/android/java
         run: ./gradlew generateGodotTemplates
@@ -420,6 +430,10 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
       - uses: actions/setup-java@v5
         with:
@@ -453,6 +467,10 @@ jobs:
             cp -r "$dir"debug godot/platform/android/java/lib/libs/ 2>/dev/null || true
           done
           find godot/platform/android/java/lib/libs -type f | sort
+
+      # Same scons PATH requirement as the standard gradle packaging job.
+      - name: Install SCons
+        run: python -m pip install --upgrade scons
 
       - name: Generate mono Android templates
         working-directory: godot/platform/android/java
