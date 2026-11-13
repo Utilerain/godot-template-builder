@@ -67,7 +67,12 @@ else
   warn "AccessKit.xcframework not found - accessibility support will be omitted."
 fi
 
-ABS_OUT="$(pwd)/$OUT_DIR"
+# OUT_DIR may be absolute (CI passes $GITHUB_WORKSPACE/ios_out); only prefix
+# relative paths with the current (godot) dir.
+case "$OUT_DIR" in
+  /*) ABS_OUT="$OUT_DIR" ;;
+  *)  ABS_OUT="$(pwd)/$OUT_DIR" ;;
+esac
 ( cd .build/ios_xcode && zip -q -9 -r "$ABS_OUT/ios.zip" . )
 rm -rf .build/ios_xcode
 
