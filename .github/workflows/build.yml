@@ -139,6 +139,24 @@ jobs:
           ref: ${{ needs.validate.outputs.tag }}
           path: godot
 
+      - name: Apply custom.py overrides (if present)
+        shell: bash
+        run: |
+          # custom.py is Godot's documented mechanism for durable SCons option
+          # overrides: when present in this repository's root it is copied into
+          # the engine checkout and applies to every scons build of the
+          # pipeline. SCons treats the file as defaults, so command-line args
+          # still win over custom.py values.
+          if [ -f custom.py ]; then
+            python -c "import ast; ast.parse(open('custom.py', encoding='utf-8').read())" \
+              || { echo "ERROR: custom.py is not valid Python" >&2; exit 1; }
+            cp custom.py godot/custom.py
+            echo "custom.py found in the repo root, applying overrides:"
+            cat custom.py
+          else
+            echo "No custom.py in the repo root - using stock build defaults."
+          fi
+
       - name: Prepare build profile
         run: python scripts/prepare_profile.py --input "${{ needs.validate.outputs.profile }}" --output .build/profile.gdbuild
 
@@ -231,6 +249,24 @@ jobs:
           repository: godotengine/godot
           ref: ${{ needs.validate.outputs.tag }}
           path: godot
+
+      - name: Apply custom.py overrides (if present)
+        shell: bash
+        run: |
+          # custom.py is Godot's documented mechanism for durable SCons option
+          # overrides: when present in this repository's root it is copied into
+          # the engine checkout and applies to every scons build of the
+          # pipeline. SCons treats the file as defaults, so command-line args
+          # still win over custom.py values.
+          if [ -f custom.py ]; then
+            python -c "import ast; ast.parse(open('custom.py', encoding='utf-8').read())" \
+              || { echo "ERROR: custom.py is not valid Python" >&2; exit 1; }
+            cp custom.py godot/custom.py
+            echo "custom.py found in the repo root, applying overrides:"
+            cat custom.py
+          else
+            echo "No custom.py in the repo root - using stock build defaults."
+          fi
 
       - name: Prepare build profile
         run: python scripts/prepare_profile.py --input "${{ needs.validate.outputs.profile }}" --output .build/profile.gdbuild

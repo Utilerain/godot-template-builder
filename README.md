@@ -91,6 +91,12 @@ Details and the file format reference: [profiles/README.md](profiles/README.md).
 
 Each re-run for the same version updates the existing release instead of creating duplicates.
 
+### SCons overrides (`custom.py`)
+
+If a `custom.py` file is committed to the repository root, it is copied into the engine checkout and applies to **every** scons build of the pipeline (all platforms, the glue editor, too). This is Godot's own mechanism for durable build-option overrides — handy for switches you want on permanently, e.g. `debug_symbols = "no"`.
+
+Precedence: **build profile > command-line SCons args (`extra_scons_args`) > `custom.py` > stock defaults** — SCons treats the file as defaults, so per-run workflow inputs still win over it. CI fails fast with a clear error if the file is not valid Python.
+
 ### Platform notes
 
 - **Web**: all 8 official wasm32 variants (`web_[dlink_][nothreads_]release|debug.zip`), built with the Emscripten version pinned by Godot's own CI for that release (4.0.11 for 4.7.2).
@@ -128,6 +134,7 @@ The editor picks templates up automatically when the folder version matches the 
 
 ```
 GODOT_VERSION              ← pinned engine version (stable only)
+custom.py                  ← (optional) SCons overrides applied to every build
 profiles/                  ← your build profile (build_profile.json) + how-to
 scripts/
   validate_version.py      ← stable-only version validator (GitHub API)
