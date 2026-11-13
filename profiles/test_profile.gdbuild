@@ -1,0 +1,12 @@
+{
+  "type": "build_profile",
+  "disabled_build_options": {
+    "module_openxr_enabled": false,
+    "module_navigation_2d_enabled": false,
+    "module_navigation_3d_enabled": false,
+    "module_webp_enabled": false
+  },
+  "disabled_classes": [
+    "AudioEffectRecord"
+  ]
+}

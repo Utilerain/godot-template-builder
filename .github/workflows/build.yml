@@ -31,6 +31,14 @@ on:
         description: ".NET/mono templates (separate *_mono TPZ; doubles build time; no Web)"
         type: boolean
         default: false
+      build_profile:
+        description: "Build profile file used for compilation (JSON gdbuild format)"
+        required: false
+        default: "profiles/build_profile.json"
+      publish:
+        description: "Publish/update the GitHub release (turn off for test builds)"
+        type: boolean
+        default: true
       extra_scons_args:
         description: "Extra SCons args appended to each scons build (e.g. vulkan=no)"
         required: false
@@ -51,6 +59,7 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       matrix: ${{ steps.matrix.outputs.matrix }}
       dotnet: ${{ steps.flags.outputs.dotnet }}
+      profile: ${{ inputs.build_profile || 'profiles/build_profile.json' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -65,7 +74,7 @@ jobs:
         run: python scripts/validate_version.py --file GODOT_VERSION
 
       - name: Check build profile
-        run: python scripts/prepare_profile.py --input profiles/build_profile.json --output .build/profile.gdbuild
+        run: python scripts/prepare_profile.py --input "${{ inputs.build_profile || 'profiles/build_profile.json' }}" --output .build/profile.gdbuild
 
       - name: Compute build matrix
         id: matrix
@@ -131,7 +140,7 @@ jobs:
           path: godot
 
       - name: Prepare build profile
-        run: python scripts/prepare_profile.py --input profiles/build_profile.json --output .build/profile.gdbuild
+        run: python scripts/prepare_profile.py --input "${{ needs.validate.outputs.profile }}" --output .build/profile.gdbuild
 
       - name: Build mono editor (glue generator)
         working-directory: godot
@@ -224,7 +233,7 @@ jobs:
           path: godot
 
       - name: Prepare build profile
-        run: python scripts/prepare_profile.py --input profiles/build_profile.json --output .build/profile.gdbuild
+        run: python scripts/prepare_profile.py --input "${{ needs.validate.outputs.profile }}" --output .build/profile.gdbuild
 
       - name: Restore mono glue
         if: matrix.variant == 'mono'
@@ -634,7 +643,7 @@ jobs:
         run: python scripts/make_version_txt.py --godot-dir godot >> "$GITHUB_OUTPUT"
 
       - name: Prepare profile summary
-        run: python scripts/prepare_profile.py --input profiles/build_profile.json --output .build/profile.gdbuild
+        run: python scripts/prepare_profile.py --input "${{ needs.validate.outputs.profile }}" --output .build/profile.gdbuild
 
       - name: Assemble template package
         run: python scripts/package_templates.py --variant standard --tpl-dir "${{ steps.tpl.outputs.template_dir }}" --tag "$TAG" --artifacts artifacts --dist-dir godot/misc/dist --icudt godot/thirdparty/icu4c/icudt_godot.dat --output .
@@ -652,7 +661,15 @@ jobs:
             python scripts/make_release_notes.py $ARGS --tpz "Godot_v${TAG}_export_templates.tpz"
           fi
 
+      - name: Upload template packages (run artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: template-packages
+          path: Godot_v*_export_templates.tpz
+          if-no-files-found: error
+
       - name: Publish release
+        if: inputs.publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}

@@ -20,6 +20,11 @@ If you saved it as `.gdbuild`, either rename it to `build_profile.json` or leave
 
 - Classes disabled in the profile are **physically removed from the templates at compile time**: if an exported project uses such a class, the game will crash at runtime. Test the project before building the templates.
 - If `build_profile.json` (or `.gdbuild`) is not found, CI builds the templates with the **standard feature set** and warns about it in the log and the release notes — the build does not fail.
+- Profile values are applied by Godot's `SConstruct` **after the command-line SCons args**, so a profile option always wins over an equivalent command-line argument of the same run.
+
+## Test profile
+
+[`test_profile.gdbuild`](test_profile.gdbuild) is a committed example used to verify the profile machinery end to end: it disables the XR, 2D/3D navigation and WebP modules plus the `AudioEffectRecord` class. To build with it, run **Build export templates** with `build_profile` = `profiles/test_profile.gdbuild` (and optionally `publish` off, so the packages stay as run artifacts instead of replacing the release).
 
 ## Format (reference)
 
@@ -36,5 +41,5 @@ The file is passed to SCons via the `build_profile=` option (see Godot's `SConst
 }
 ```
 
-- `disabled_build_options` — SCons build option values (disables modules and features);
+- `disabled_build_options` — SCons build option values (**JSON booleans**, as the editor writes them; note that the string `"no"` would be truthy in SCons and would not disable anything);
 - `disabled_classes` — names of Godot classes that will not make it into the binaries.

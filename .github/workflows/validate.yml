@@ -30,5 +30,19 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/validate_version.py --file GODOT_VERSION
 
-      - name: Check build profile
-        run: python scripts/prepare_profile.py --input profiles/build_profile.json --output .build/profile.gdbuild
+      - name: Check build profiles
+        run: |
+          shopt -s nullglob
+          profiles=()
+          for f in profiles/*.json profiles/*.gdbuild; do
+            profiles+=("$f")
+          done
+          if [ ${#profiles[@]} -eq 0 ]; then
+            # No profile committed yet: run the default path so the warning shows.
+            python scripts/prepare_profile.py --input profiles/build_profile.json --output .build/profile.gdbuild
+          else
+            for p in "${profiles[@]}"; do
+              echo "=== Checking $p ==="
+              python scripts/prepare_profile.py --input "$p" --output ".build/checked_$(basename "${p%.gdbuild}").gdbuild"
+            done
+          fi
