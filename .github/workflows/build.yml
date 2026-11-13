@@ -315,7 +315,9 @@ jobs:
         env:
           # package_ios.sh defaults to <godot>/ios_out; upload glob is relative to the workspace root.
           IOS_OUT_DIR: ${{ github.workspace }}/ios_out
-        run: bash scripts/package_ios.sh godot
+        run: |
+          mkdir -p "$IOS_OUT_DIR"
+          bash scripts/package_ios.sh godot
 
       - name: Build (macOS, ${{ matrix.target }})
         if: matrix.platform == 'macos'
