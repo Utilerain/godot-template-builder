@@ -86,6 +86,7 @@ Details and the file format reference: [profiles/README.md](profiles/README.md).
 | `net-glue` | (only with .NET) builds a Linux mono editor and generates the mono glue for all mono builds |
 | `build` (matrix) | one job per platform/target/variant; each runs the platform-appropriate toolchain (scons, emscripten, NDK, Xcode) |
 | `android-gradle` / `net-android-gradle` | packs the Android native libraries into `android_release.apk` / `android_debug.apk` / `android_source.zip` (standard and mono variants) |
+| `smoke-test` | tier-1 pre-release checks: runs the Windows/Linux/macOS templates on native runners (`--headless --version`), statically verifies web wasm payloads, Android APK ABIs and iOS architecture slices; blocks the release on failure |
 | `package-release` | assembles the `.tpz` package(s) (same layout as the official ones) and publishes a GitHub release tagged `godot-<version>` |
 
 Each re-run for the same version updates the existing release instead of creating duplicates.

@@ -494,13 +494,116 @@ jobs:
           path: android_out/*
           if-no-files-found: error
 
+  # Tier-1 smoke tests: run each standard template on its "native" runner and
+  # statically check the packaged artifacts (web wasm payloads, Android ABIs,
+  # iOS architecture slices). Catches broken links, wrong architectures and
+  # "compiled but won't start" binaries before anything gets published.
+  smoke-test:
+    name: smoke / ${{ matrix.key }}
+    needs: [validate, build, android-gradle]
+    if: >-
+      always() && needs.validate.result == 'success' && needs.build.result == 'success'
+      && (needs.android-gradle.result == 'success' || needs.android-gradle.result == 'skipped')
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # Runner pins follow the same rationale as make_matrix.py RUNNER_*.
+        include:
+          - key: linux-web-android
+            os: ubuntu-22.04
+          - key: windows
+            os: windows-latest
+          - key: macos-ios
+            os: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Linux template artifacts
+        if: matrix.key == 'linux-web-android' && contains(needs.validate.outputs.matrix, '"linux-release"')
+        uses: actions/download-artifact@v4
+        with:
+          name: template-linux-release
+          path: artifacts/linux-release
+
+      - name: Download Linux debug template artifacts
+        if: matrix.key == 'linux-web-android' && contains(needs.validate.outputs.matrix, '"linux-debug"')
+        uses: actions/download-artifact@v4
+        with:
+          name: template-linux-debug
+          path: artifacts/linux-debug
+
+      - name: Download Web template artifacts
+        if: matrix.key == 'linux-web-android' && contains(needs.validate.outputs.matrix, '"web"')
+        uses: actions/download-artifact@v4
+        with:
+          name: template-web
+          path: artifacts/web
+
+      - name: Download Android template artifacts
+        if: matrix.key == 'linux-web-android' && needs.android-gradle.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: template-android
+          path: artifacts/android
+
+      - name: Download Windows template artifacts (release)
+        if: matrix.key == 'windows' && contains(needs.validate.outputs.matrix, '"windows-release"')
+        uses: actions/download-artifact@v4
+        with:
+          name: template-windows-release
+          path: artifacts/windows-release
+
+      - name: Download Windows template artifacts (debug)
+        if: matrix.key == 'windows' && contains(needs.validate.outputs.matrix, '"windows-debug"')
+        uses: actions/download-artifact@v4
+        with:
+          name: template-windows-debug
+          path: artifacts/windows-debug
+
+      - name: Download macOS template artifacts (release)
+        if: matrix.key == 'macos-ios' && contains(needs.validate.outputs.matrix, '"macos-release"')
+        uses: actions/download-artifact@v4
+        with:
+          name: template-macos-release
+          path: artifacts/macos-release
+
+      - name: Download macOS template artifacts (debug)
+        if: matrix.key == 'macos-ios' && contains(needs.validate.outputs.matrix, '"macos-debug"')
+        uses: actions/download-artifact@v4
+        with:
+          name: template-macos-debug
+          path: artifacts/macos-debug
+
+      - name: Download iOS template artifacts
+        if: matrix.key == 'macos-ios' && contains(needs.validate.outputs.matrix, '"ios"')
+        uses: actions/download-artifact@v4
+        with:
+          name: template-ios
+          path: artifacts/ios
+
+      - name: Smoke test (Linux run + Web/Android static)
+        if: matrix.key == 'linux-web-android'
+        run: bash scripts/smoke_linux.sh ${{ needs.validate.outputs.tag }}
+
+      - name: Smoke test (Windows run)
+        if: matrix.key == 'windows'
+        shell: bash
+        run: bash scripts/smoke_windows.sh ${{ needs.validate.outputs.tag }}
+
+      - name: Smoke test (macOS run + iOS static)
+        if: matrix.key == 'macos-ios'
+        run: bash scripts/smoke_macos.sh ${{ needs.validate.outputs.tag }}
+
   package-release:
     name: Package & publish release
-    needs: [validate, build, android-gradle, net-android-gradle]
+    needs: [validate, build, android-gradle, net-android-gradle, smoke-test]
     if: >-
       always() && needs.validate.result == 'success' && needs.build.result == 'success'
       && (needs.android-gradle.result == 'success' || needs.android-gradle.result == 'skipped')
       && (needs.net-android-gradle.result == 'success' || needs.net-android-gradle.result == 'skipped')
+      && needs.smoke-test.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
