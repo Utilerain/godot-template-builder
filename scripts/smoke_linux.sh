@@ -35,7 +35,7 @@ run_linux() {
     fail "$bin exited non-zero"
   fi
   printf '%s\n' "$out" | head -n1
-  printf '%s\n' "$out" | grep -q "^Godot Engine v$EXPECT_VER" \
+  printf '%s\n' "$out" | grep -q "^$EXPECT_VER\." \
     || fail "$bin: unexpected --version output: $out"
   echo "OK: $bin"
 }

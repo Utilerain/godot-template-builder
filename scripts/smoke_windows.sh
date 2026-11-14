@@ -32,7 +32,7 @@ run_win() {
   if ! out="$("$exe" --headless --version 2>&1)"; then
     fail "$exe exited non-zero"
   fi
-  if [ "$want_output" = "yes" ] && ! printf '%s' "$out" | grep -q "^Godot Engine v$EXPECT_VER"; then
+  if [ "$want_output" = "yes" ] && ! printf '%s' "$out" | grep -q "^$EXPECT_VER\."; then
     fail "$exe: unexpected --version output: $out"
   fi
   if [ -n "$out" ]; then
@@ -43,11 +43,11 @@ run_win() {
 
 if want EXPECT_WINDOWS_RELEASE; then
   run_win "$ART/windows-release/godot.windows.template_release.x86_64.exe" no
-  run_win "$ART/windows-release/godot.windows.template_release.x86_64_console.exe" yes
+  run_win "$ART/windows-release/godot.windows.template_release.x86_64.console.exe" yes
 fi
 if want EXPECT_WINDOWS_DEBUG; then
   run_win "$ART/windows-debug/godot.windows.template_debug.x86_64.exe" no
-  run_win "$ART/windows-debug/godot.windows.template_debug.x86_64_console.exe" yes
+  run_win "$ART/windows-debug/godot.windows.template_debug.x86_64.console.exe" yes
 fi
 
 echo "Windows smoke tests passed."

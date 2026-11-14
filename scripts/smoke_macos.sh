@@ -46,7 +46,7 @@ run_mac() {
     fail "$bin exited non-zero"
   fi
   printf '%s\n' "$out" | head -n1
-  printf '%s\n' "$out" | grep -q "^Godot Engine v$EXPECT_VER" \
+  printf '%s\n' "$out" | grep -q "^$EXPECT_VER\." \
     || fail "$bin: unexpected --version output: $out"
   lipo_expect "$bin" x86_64 arm64
   echo "OK: $bin"
