@@ -6,8 +6,13 @@
 # depending on how it was launched, so its output is not asserted).
 #
 # Usage: smoke_windows.sh <tag>   (e.g. "4.7.2-stable")
-# Env:   ART_DIR base directory holding the downloaded artifacts
-#        (subdirs: windows-release, windows-debug; any may be absent).
+#
+# Expectation env vars set by the workflow ("true" = the platform was built,
+# its artifacts MUST be present and are checked; anything else = skip):
+#   EXPECT_WINDOWS_RELEASE, EXPECT_WINDOWS_DEBUG
+# Env:   ART_DIR base directory holding the downloaded artifacts. Artifact
+#        contents live flat at the top level: upload-artifact v4 strips the
+#        common ancestor of the upload globs (e.g. "godot/bin/").
 set -euo pipefail
 
 TAG="${1:?expected tag required, e.g. 4.7.2-stable}"
@@ -16,10 +21,14 @@ ART="${ART_DIR:-artifacts}"
 
 fail() { echo "ERROR: $*" >&2; exit 1; }
 
+want() { [ "${!1:-}" = "true" ]; }
+
+require_file() { [ -f "$1" ] || fail "missing expected artifact file: $1"; }
+
 # run_win <exe> <yes|no expect version on stdout>
 run_win() {
   local exe="$1" want_output="$2" out
-  [ -f "$exe" ] || fail "missing Windows template binary: $exe"
+  require_file "$exe"
   if ! out="$("$exe" --headless --version 2>&1)"; then
     fail "$exe exited non-zero"
   fi
@@ -32,13 +41,13 @@ run_win() {
   echo "OK: $exe"
 }
 
-if [ -f "$ART/windows-release/godot/bin/godot.windows.template_release.x86_64.exe" ]; then
-  run_win "$ART/windows-release/godot/bin/godot.windows.template_release.x86_64.exe" no
-  run_win "$ART/windows-release/godot/bin/godot.windows.template_release.x86_64_console.exe" yes
+if want EXPECT_WINDOWS_RELEASE; then
+  run_win "$ART/windows-release/godot.windows.template_release.x86_64.exe" no
+  run_win "$ART/windows-release/godot.windows.template_release.x86_64_console.exe" yes
 fi
-if [ -f "$ART/windows-debug/godot/bin/godot.windows.template_debug.x86_64.exe" ]; then
-  run_win "$ART/windows-debug/godot/bin/godot.windows.template_debug.x86_64.exe" no
-  run_win "$ART/windows-debug/godot/bin/godot.windows.template_debug.x86_64_console.exe" yes
+if want EXPECT_WINDOWS_DEBUG; then
+  run_win "$ART/windows-debug/godot.windows.template_debug.x86_64.exe" no
+  run_win "$ART/windows-debug/godot.windows.template_debug.x86_64_console.exe" yes
 fi
 
 echo "Windows smoke tests passed."

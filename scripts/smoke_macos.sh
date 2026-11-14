@@ -6,8 +6,13 @@
 #        architecture slice (arm64 device / x86_64 simulator).
 #
 # Usage: smoke_macos.sh <tag>   (e.g. "4.7.2-stable")
-# Env:   ART_DIR base directory holding the downloaded artifacts
-#        (subdirs: macos-release, macos-debug, ios; any may be absent).
+#
+# Expectation env vars set by the workflow ("true" = the platform was built,
+# its artifacts MUST be present and are checked; anything else = skip):
+#   EXPECT_MACOS_RELEASE, EXPECT_MACOS_DEBUG, EXPECT_IOS
+# Env:   ART_DIR base directory holding the downloaded artifacts. Artifact
+#        contents live flat at the top level: upload-artifact v4 strips the
+#        common ancestor of the upload globs (e.g. "macos_out/", "ios_out/").
 set -euo pipefail
 
 TAG="${1:?expected tag required, e.g. 4.7.2-stable}"
@@ -16,10 +21,14 @@ ART="${ART_DIR:-artifacts}"
 
 fail() { echo "ERROR: $*" >&2; exit 1; }
 
+want() { [ "${!1:-}" = "true" ]; }
+
+require_file() { [ -f "$1" ] || fail "missing expected artifact file: $1"; }
+
 # lipo_expect <file> <required arch>...
 lipo_expect() {
   local file="$1" arch out
-  [ -f "$file" ] || fail "missing file: $file"
+  require_file "$file"
   out="$(lipo -info "$file")" || fail "lipo failed on $file"
   shift
   for arch in "$@"; do
@@ -31,7 +40,7 @@ lipo_expect() {
 
 run_mac() {
   local bin="$1" out
-  [ -f "$bin" ] || fail "missing macOS template binary: $bin"
+  require_file "$bin"
   chmod +x "$bin"
   if ! out="$("$bin" --headless --version 2>&1)"; then
     fail "$bin exited non-zero"
@@ -44,17 +53,18 @@ run_mac() {
 }
 
 # --- macOS: run both universal binaries --------------------------------------
-if [ -f "$ART/macos-release/macos_out/godot_macos_release.universal" ]; then
-  run_mac "$ART/macos-release/macos_out/godot_macos_release.universal"
+if want EXPECT_MACOS_RELEASE; then
+  run_mac "$ART/macos-release/godot_macos_release.universal"
 fi
-if [ -f "$ART/macos-debug/macos_out/godot_macos_debug.universal" ]; then
-  run_mac "$ART/macos-debug/macos_out/godot_macos_debug.universal"
+if want EXPECT_MACOS_DEBUG; then
+  run_mac "$ART/macos-debug/godot_macos_debug.universal"
 fi
 
 # --- iOS: static libraries inside ios.zip ------------------------------------
-if [ -f "$ART/ios/ios_out/ios.zip" ]; then
+if want EXPECT_IOS; then
+  require_file "$ART/ios/ios.zip"
   tmp="$(mktemp -d)"
-  unzip -q "$ART/ios/ios_out/ios.zip" -d "$tmp"
+  unzip -q "$ART/ios/ios.zip" -d "$tmp"
   lipo_expect "$tmp/libgodot.ios.release.xcframework/ios-arm64/libgodot.a" arm64
   lipo_expect "$tmp/libgodot.ios.release.xcframework/ios-arm64_x86_64-simulator/libgodot.a" x86_64
   lipo_expect "$tmp/libgodot.ios.debug.xcframework/ios-arm64/libgodot.a" arm64

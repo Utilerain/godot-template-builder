@@ -551,6 +551,19 @@ jobs:
       && (needs.android-gradle.result == 'success' || needs.android-gradle.result == 'skipped')
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    env:
+      # Which platforms each smoke leg must check; mirrors the download-step
+      # conditions below. "true" = artifacts must exist and be verified, so a
+      # missing artifact is a hard failure instead of a silently skipped check.
+      EXPECT_LINUX_RELEASE: ${{ contains(needs.validate.outputs.matrix, '"linux-release"') }}
+      EXPECT_LINUX_DEBUG: ${{ contains(needs.validate.outputs.matrix, '"linux-debug"') }}
+      EXPECT_WINDOWS_RELEASE: ${{ contains(needs.validate.outputs.matrix, '"windows-release"') }}
+      EXPECT_WINDOWS_DEBUG: ${{ contains(needs.validate.outputs.matrix, '"windows-debug"') }}
+      EXPECT_MACOS_RELEASE: ${{ contains(needs.validate.outputs.matrix, '"macos-release"') }}
+      EXPECT_MACOS_DEBUG: ${{ contains(needs.validate.outputs.matrix, '"macos-debug"') }}
+      EXPECT_WEB: ${{ contains(needs.validate.outputs.matrix, '"web"') }}
+      EXPECT_IOS: ${{ contains(needs.validate.outputs.matrix, '"ios"') }}
+      EXPECT_ANDROID: ${{ needs.android-gradle.result == 'success' }}
     strategy:
       fail-fast: false
       matrix:
